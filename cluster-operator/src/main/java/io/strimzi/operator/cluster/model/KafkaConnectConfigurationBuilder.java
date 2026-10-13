@@ -387,21 +387,34 @@ public class KafkaConnectConfigurationBuilder {
      * @return Returns the builder instance
      */
     public KafkaConnectConfigurationBuilder withStrimziMetricsReporter(MetricsModel model, List<String> defaultAllowList) {
+        return withStrimziMetricsReporter(model, defaultAllowList, Map.of());
+    }
+
+    /**
+     * Configures the Strimzi Metrics Reporter. It is set only if user enables Strimzi Metrics Reporter.
+     * The configuration is repeated for the clients used by the worker. With OTLP, the reporters share a single
+     * exporter, as they are configured with the same settings.
+     *
+     * @param model             Strimzi Metrics Reporter configuration
+     * @param defaultAllowList  Default allow list used when the user has not configured one
+     * @param otlpConfiguration OTLP configuration of the reporter, without the reporter prefix. Empty when OTLP is not enabled.
+     *
+     * @return Returns the builder instance
+     */
+    public KafkaConnectConfigurationBuilder withStrimziMetricsReporter(MetricsModel model, List<String> defaultAllowList, Map<String, String> otlpConfiguration) {
         if (model instanceof StrimziMetricsReporterModel reporterModel) {
             String allowList = reporterModel.getAllowListOrDefault(defaultAllowList);
             printSectionHeader("Strimzi Metrics Reporter configuration");
-            writer.println(StrimziMetricsReporterConfig.LISTENER_ENABLE + "=true");
-            writer.println(StrimziMetricsReporterConfig.LISTENER + "=http://:" + MetricsModel.METRICS_PORT);
-            writer.println(StrimziMetricsReporterConfig.ALLOW_LIST + "=" + allowList);
-            writer.println("admin." + StrimziMetricsReporterConfig.LISTENER_ENABLE + "=true");
-            writer.println("admin." + StrimziMetricsReporterConfig.LISTENER + "=http://:" + MetricsModel.METRICS_PORT);
-            writer.println("admin." + StrimziMetricsReporterConfig.ALLOW_LIST + "=" + allowList);
-            writer.println("producer." + StrimziMetricsReporterConfig.LISTENER_ENABLE + "=true");
-            writer.println("producer." + StrimziMetricsReporterConfig.LISTENER + "=http://:" + MetricsModel.METRICS_PORT);
-            writer.println("producer." + StrimziMetricsReporterConfig.ALLOW_LIST + "=" + allowList);
-            writer.println("consumer." + StrimziMetricsReporterConfig.LISTENER_ENABLE + "=true");
-            writer.println("consumer." + StrimziMetricsReporterConfig.LISTENER + "=http://:" + MetricsModel.METRICS_PORT);
-            writer.println("consumer." + StrimziMetricsReporterConfig.ALLOW_LIST + "=" + allowList);
+            for (String prefix : List.of("", "admin.", "producer.", "consumer.")) {
+                if (reporterModel.isPrometheusEndpointEnabled()) {
+                    writer.println(prefix + StrimziMetricsReporterConfig.LISTENER_ENABLE + "=true");
+                    writer.println(prefix + StrimziMetricsReporterConfig.LISTENER + "=http://:" + MetricsModel.METRICS_PORT);
+                } else {
+                    writer.println(prefix + StrimziMetricsReporterConfig.LISTENER_ENABLE + "=false");
+                }
+                writer.println(prefix + StrimziMetricsReporterConfig.ALLOW_LIST + "=" + allowList);
+                otlpConfiguration.forEach((key, value) -> writer.println(prefix + StrimziMetricsReporterConfig.PREFIX + key + "=" + value));
+            }
             writer.println();
         }
         return this;

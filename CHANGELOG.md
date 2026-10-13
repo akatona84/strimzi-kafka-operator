@@ -4,6 +4,9 @@
 
 * Use ubi9-micro as a base image for operators, kafka-based, and maven-builder images.
 * Strimzi Drain Cleaner updated to 1.7.0 (included in the Strimzi installation files)
+* Support for pushing metrics to an OTLP endpoint with the Strimzi Metrics Reporter, using the new `otlp` property of the `strimziMetricsReporter` metrics configuration.
+  The Prometheus endpoint can be disabled with the new `prometheusEndpoint` property.
+* The tracing agent disables the metrics and logs exporters of the tracing OpenTelemetry SDK only, instead of setting the `otel.metrics.exporter` and `otel.logs.exporter` system properties for the whole JVM.
 
 ### Major changes, deprecations, and removals
 

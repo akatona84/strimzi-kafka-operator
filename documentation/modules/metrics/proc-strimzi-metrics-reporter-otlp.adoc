@@ -1,0 +1,83 @@
+:_mod-docs-content-type: PROCEDURE
+
+// This assembly is included in the following assemblies:
+//
+// metrics/assembly_metrics-prometheus-setup.adoc
+
+[id='proc-metrics-reporter-otlp-{context}']
+= Pushing metrics to an OTLP endpoint with Strimzi Metrics Reporter
+
+[role="_abstract"]
+Instead of, or in addition to, exposing metrics for Prometheus to scrape, the {StrimziMetricsReporter} can push metrics to an OpenTelemetry Protocol (OTLP) endpoint, such as an OpenTelemetry Collector.
+Each pod pushes its own metrics, so no workload has to scrape the pods.
+
+OTLP push is supported for the same components as the Strimzi Metrics Reporter:
+
+* Kafka
+* HTTP Bridge
+* Kafka Connect
+* Kafka MirrorMaker 2
+
+The same metrics, filtered by the same `allowList`, are pushed and exposed on the Prometheus endpoint.
+Metrics are converted following the OpenTelemetry conventions: the `_total` suffix of counters and the unit suffixes are not part of the metric names.
+Backends that convert OTLP metrics to the Prometheus format, such as Prometheus, add them back.
+
+.Prerequisites
+
+* An OTLP endpoint reachable from the pods, such as an OpenTelemetry Collector.
+If you restrict egress traffic from the pods, allow the traffic to the OTLP endpoint.
+
+.Procedure
+
+. Add the `otlp` property to the `metricsConfig` configuration of the component.
++
+.Example configuration for pushing metrics to an OTLP endpoint
+[source,yaml,subs="+attributes"]
+----
+apiVersion: {KafkaApiVersion}
+kind: Kafka
+metadata:
+  name: my-cluster
+spec:
+  kafka:
+    # ...
+    metricsConfig:
+      type: strimziMetricsReporter
+      values:
+        allowList:
+          - "kafka_server_replicamanager_.*"
+        prometheusEndpoint:
+          enabled: false # <1>
+        otlp:
+          endpoint: http://otel-collector.observability.svc:4317 # <2>
+          protocol: grpc # <3>
+          intervalSeconds: 30 # <4>
+          resourceAttributes: # <5>
+            deployment.environment.name: production
+----
+<1> (Optional) Disables the Prometheus endpoint, so the metrics are only pushed. When the Prometheus endpoint is disabled, the metrics port and its network policy rule are not created. By default, the Prometheus endpoint stays enabled.
+<2> (Optional) The OTLP endpoint. With the `http/protobuf` protocol, the `/v1/metrics` path is appended. When not set, the standard OpenTelemetry configuration applies, for example the `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable.
+<3> (Optional) The OTLP transport protocol, `grpc` or `http/protobuf`. Defaults to `grpc`.
+<4> (Optional) The interval in seconds between two pushes. Defaults to 60 seconds.
+<5> (Optional) Additional resource attributes added to the pushed metrics.
+
+. Apply the changes to the custom resource configuration.
++
+Changes to the `otlp` and `prometheusEndpoint` properties trigger a rolling update of the pods.
+
+Strimzi adds the following resource attributes to the pushed metrics, following the OpenTelemetry semantic conventions for Kubernetes:
+
+* `k8s.namespace.name`, `k8s.pod.name`, `k8s.container.name`, and `k8s.node.name`
+* `service.name`, set to the name of the custom resource
+* `service.namespace`, set to the namespace
+* `service.instance.id`, set to `<namespace>.<pod_name>.<container_name>`
+
+If you set the `OTEL_SERVICE_NAME` environment variable in the container template, for example for tracing, its value is used as the `service.name` of the metrics too.
+Resource attributes set in `resourceAttributes` replace the ones set by Strimzi.
+
+.Configuring TLS and authentication
+
+The settings that are not part of the `otlp` configuration, such as trusted certificates, client certificates, and headers, are configured using the standard OpenTelemetry environment variables in the container template.
+For example, use `OTEL_EXPORTER_OTLP_CERTIFICATE` with the path to a trusted certificate mounted from a secret using additional volumes, and `OTEL_EXPORTER_OTLP_HEADERS` referencing a secret to pass credentials.
+Use the `OTEL_EXPORTER_OTLP_METRICS_*` variants when the settings must only apply to metrics, and not to traces.
+The values configured in the `otlp` property take precedence over the environment variables.

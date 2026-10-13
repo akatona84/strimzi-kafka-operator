@@ -627,7 +627,40 @@ spec:
                         items:
                           type: string
                         description: A list of regex patterns to filter the metrics to collect. Should contain at least one element.
+                      prometheusEndpoint:
+                        type: object
+                        properties:
+                          enabled:
+                            type: boolean
+                            description: "Whether the metrics are exposed in the Prometheus format for scraping. When disabled, `otlp` must be configured. Defaults to `true`."
+                        description: "Configures the endpoint exposing the metrics in the Prometheus format. When not set, the endpoint is enabled."
+                      otlp:
+                        type: object
+                        properties:
+                          endpoint:
+                            type: string
+                            pattern: ^https?://.+$
+                            description: "The OTLP endpoint the metrics are pushed to, for example `http://my-collector:4317`. It must start with `http://` or `https://`. With the `http/protobuf` protocol, the `/v1/metrics` path is appended. When not set, the standard OpenTelemetry configuration applies, for example the `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable set in the container template."
+                          protocol:
+                            type: string
+                            enum:
+                            - grpc
+                            - http/protobuf
+                            description: "The OTLP transport protocol, either `grpc` or `http/protobuf`. When not set, the standard OpenTelemetry configuration applies, which defaults to `grpc`."
+                          intervalSeconds:
+                            type: integer
+                            minimum: 1
+                            description: "The interval in seconds between two pushes. When not set, the standard OpenTelemetry configuration applies, which defaults to 60 seconds."
+                          resourceAttributes:
+                            additionalProperties:
+                              type: string
+                            type: object
+                            description: "Additional resource attributes added to the pushed metrics. They override the attributes set by the operator, such as `service.name`, for the same keys."
+                        description: "Enables and configures pushing the metrics to an OTLP endpoint, such as an OpenTelemetry Collector. The same metrics, filtered by the same `allowList`, are pushed and exposed on the Prometheus endpoint."
                     description: Configuration values for the Strimzi Metrics Reporter.
+                    x-kubernetes-validations:
+                    - rule: '!has(self.prometheusEndpoint) || !has(self.prometheusEndpoint.enabled) || self.prometheusEndpoint.enabled || has(self.otlp)'
+                      message: otlp must be configured when the Prometheus endpoint is disabled
                 required:
                 - type
                 description: Metrics configuration.

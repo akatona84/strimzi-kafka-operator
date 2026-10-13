@@ -83,6 +83,7 @@ import static java.util.Collections.singletonMap;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.hasItems;
 import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.CoreMatchers.notNullValue;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -1292,6 +1293,33 @@ public class KafkaBridgeClusterTest {
 
         assertThat(kbc.metrics(), is(notNullValue()));
         assertThat(((StrimziMetricsReporterModel) kbc.metrics()).getAllowListOrDefault(List.of()), is("kafka_producer_producer_metrics.*,kafka_producer_kafka_metrics_count_count"));
+    }
+
+    @Test
+    public void testStrimziMetricsReporterWithOtlpConfig() {
+        KafkaBridge resource = new KafkaBridgeBuilder(RESOURCE)
+                .editSpec()
+                    .withNewStrimziMetricsReporterConfig()
+                        .withNewValues()
+                            .withNewOtlp()
+                                .withEndpoint("http://my-collector:4317")
+                            .endOtlp()
+                        .endValues()
+                    .endStrimziMetricsReporterConfig()
+                .endSpec()
+                .build();
+
+        KafkaBridgeCluster kbc = KafkaBridgeCluster.fromCrd(Reconciliation.DUMMY_RECONCILIATION, resource, SHARED_ENV_PROVIDER);
+
+        String config = kbc.generateBridgeConfigMap(METRICS_AND_LOGGING).getData().get(BRIDGE_CONFIGURATION_FILENAME);
+        assertThat(config, containsString("bridge.metrics.otlp.enable=true"));
+        assertThat(config, containsString("bridge.metrics.otlp.endpoint=http://my-collector:4317"));
+        assertThat(config, not(containsString("bridge.metrics.endpoint.enable")));
+        assertThat(config, not(containsString("kafka.prometheus.metrics.reporter.otlp")));
+
+        Deployment dep = kbc.generateDeployment(new HashMap<>(), true, null, null);
+        assertThat(dep.getSpec().getTemplate().getSpec().getContainers().get(0).getEnv().stream().map(EnvVar::getName).toList(),
+                hasItems(StrimziMetricsReporterModel.ENV_VAR_POD_NAME, StrimziMetricsReporterModel.ENV_VAR_NODE_NAME));
     }
 
     @Test

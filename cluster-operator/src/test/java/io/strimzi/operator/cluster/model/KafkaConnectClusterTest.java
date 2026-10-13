@@ -1502,6 +1502,44 @@ public class KafkaConnectClusterTest {
     }
 
     @Test
+    public void testStrimziMetricsReporterWithOtlpConfig() {
+        MetricsConfig metrics = new StrimziMetricsReporterBuilder()
+                .withNewValues()
+                    .withNewPrometheusEndpoint()
+                        .withEnabled(false)
+                    .endPrometheusEndpoint()
+                    .withNewOtlp()
+                        .withEndpoint("http://my-collector:4317")
+                    .endOtlp()
+                .endValues().build();
+
+        KafkaConnect kafkaConnect = new KafkaConnectBuilder(RESOURCE)
+                .editSpec()
+                    .withMetricsConfig(metrics)
+                .endSpec()
+                .build();
+
+        KafkaConnectCluster kc = KafkaConnectCluster.fromCrd(Reconciliation.DUMMY_RECONCILIATION, kafkaConnect, VERSIONS, SHARED_ENV_PROVIDER);
+
+        String config = kc.generateConnectConfigMap(new MetricsAndLogging(null, null)).getData().get(KafkaConnectCluster.KAFKA_CONNECT_CONFIGURATION_FILENAME);
+        assertThat(config, containsString("prometheus.metrics.reporter.otlp.enable=true"));
+        assertThat(config, containsString("consumer.prometheus.metrics.reporter.otlp.endpoint=http://my-collector:4317"));
+        assertThat(config, containsString("service.name=" + NAME + ","));
+
+        // Metrics are pushed, so nothing has to connect to the pods
+        NetworkPolicy np = kc.generateNetworkPolicy(true, null, null);
+        assertThat(np.getSpec().getIngress().stream().anyMatch(ing -> ing.getPorts().get(0).getPort().equals(new IntOrString(MetricsModel.METRICS_PORT))), is(false));
+
+        StrimziPodSet podSet = kc.generatePodSet(3, Map.of(), Map.of(), null, null, null);
+        PodSetUtils.podSetToPods(podSet).forEach(pod -> {
+            Container container = pod.getSpec().getContainers().get(0);
+            assertThat(container.getPorts().stream().anyMatch(port -> MetricsModel.METRICS_PORT_NAME.equals(port.getName())), is(false));
+            assertThat(container.getEnv().stream().map(EnvVar::getName).toList(),
+                    hasItems(StrimziMetricsReporterModel.ENV_VAR_POD_NAME, StrimziMetricsReporterModel.ENV_VAR_NODE_NAME));
+        });
+    }
+
+    @Test
     public void testJmxSecretCustomLabelsAndAnnotations() {
         Map<String, String> customLabels = new HashMap<>(2);
         customLabels.put("label1", "value1");

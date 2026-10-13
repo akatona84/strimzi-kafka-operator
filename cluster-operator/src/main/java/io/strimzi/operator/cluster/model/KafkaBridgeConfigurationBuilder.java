@@ -360,9 +360,28 @@ public class KafkaBridgeConfigurationBuilder {
      * @return Returns the builder instance
      */
     public KafkaBridgeConfigurationBuilder withStrimziMetricsReporter(StrimziMetricsReporterModel model, List<String> defaultAllowList)   {
+        return withStrimziMetricsReporter(model, defaultAllowList, Map.of());
+    }
+
+    /**
+     * Configures the Strimzi Metrics Reporter. It is set only if user enables Strimzi Metrics Reporter.
+     * The Bridge exposes and pushes the metrics itself, so both the listener and the OTLP output of the reporter
+     * stay disabled in the Kafka clients.
+     *
+     * @param model             Strimzi Metrics Reporter configuration
+     * @param defaultAllowList  Default allow list used when the user has not configured one
+     * @param otlpConfiguration OTLP configuration, without prefix. Empty when OTLP is not enabled.
+     *
+     * @return Returns the builder instance
+     */
+    public KafkaBridgeConfigurationBuilder withStrimziMetricsReporter(StrimziMetricsReporterModel model, List<String> defaultAllowList, Map<String, String> otlpConfiguration)   {
         if (model != null) {
             printSectionHeader("Strimzi Metrics Reporter configuration");
             writer.println("bridge.metrics=" + TYPE_STRIMZI_METRICS_REPORTER);
+            if (!model.isPrometheusEndpointEnabled()) {
+                writer.println("bridge.metrics.endpoint.enable=false");
+            }
+            otlpConfiguration.forEach((key, value) -> writer.println("bridge.metrics." + key + "=" + value));
             // the kafka. prefix is required by the Bridge to pass Kafka client configurations
             writer.println("kafka.metric.reporters=" + StrimziMetricsReporterConfig.CLIENT_CLASS);
             writer.println("kafka." + StrimziMetricsReporterConfig.LISTENER_ENABLE + "=false");

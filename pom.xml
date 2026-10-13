@@ -596,6 +596,11 @@
                 <version>${opentelemetry.version}</version>
             </dependency>
             <dependency>
+                <groupId>io.opentelemetry</groupId>
+                <artifactId>opentelemetry-sdk-extension-autoconfigure-spi</artifactId>
+                <version>${opentelemetry.version}</version>
+            </dependency>
+            <dependency>
                 <!-- Javaluator is mathematical expression evaluator used for the advertised port template -->
                 <groupId>com.fathzer</groupId>
                 <artifactId>javaluator</artifactId>

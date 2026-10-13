@@ -29,5 +29,28 @@ public class StrimziMetricsReporterConfig {
     /** Set a comma separated list of regexes. */
     public static final String ALLOW_LIST = "prometheus.metrics.reporter.allowlist";
 
+    /** Prefix of the Strimzi Metrics Reporter configurations. */
+    public static final String PREFIX = "prometheus.metrics.reporter.";
+
+    /*
+     * The OTLP configurations are defined without the prefix, because the HTTP Bridge uses the same names with
+     * its own bridge.metrics. prefix.
+     */
+
+    /** Enable pushing metrics to an OTLP endpoint (true/false). */
+    public static final String OTLP_ENABLE = "otlp.enable";
+
+    /** Set the OTLP endpoint (e.g. http://my-collector:4317). */
+    public static final String OTLP_ENDPOINT = "otlp.endpoint";
+
+    /** Set the OTLP transport protocol (grpc or http/protobuf). */
+    public static final String OTLP_PROTOCOL = "otlp.protocol";
+
+    /** Set the interval in seconds between two pushes. */
+    public static final String OTLP_INTERVAL_SECONDS = "otlp.interval.seconds";
+
+    /** Set a comma separated list of key=value resource attributes. */
+    public static final String OTLP_RESOURCE_ATTRIBUTES = "otlp.resource.attributes";
+
     private StrimziMetricsReporterConfig() { }
 }

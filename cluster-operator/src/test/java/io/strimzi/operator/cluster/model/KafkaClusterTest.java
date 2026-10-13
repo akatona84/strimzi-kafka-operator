@@ -7,6 +7,7 @@ package io.strimzi.operator.cluster.model;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.fabric8.kubernetes.api.model.ConfigMapKeySelectorBuilder;
+import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.IntOrString;
 import io.fabric8.kubernetes.api.model.LabelSelectorRequirementBuilder;
 import io.fabric8.kubernetes.api.model.Quantity;
@@ -250,6 +251,53 @@ public class KafkaClusterTest {
         List<NetworkPolicyIngressRule> rules = np.getSpec().getIngress().stream().filter(ing -> ing.getPorts().get(0).getPort().equals(new IntOrString(StrimziMetricsReporterModel.METRICS_PORT))).toList();
 
         assertThat(rules.size(), is(1));
+    }
+
+    @Test
+    public void testStrimziMetricsReporterWithOtlpConfig() {
+        Kafka kafkaAssembly = new KafkaBuilder(KAFKA)
+                .editSpec()
+                    .editKafka()
+                        .withNewStrimziMetricsReporterConfig()
+                            .withNewValues()
+                                .withNewPrometheusEndpoint()
+                                    .withEnabled(false)
+                                .endPrometheusEndpoint()
+                                .withNewOtlp()
+                                    .withEndpoint("http://my-collector:4317")
+                                .endOtlp()
+                            .endValues()
+                        .endStrimziMetricsReporterConfig()
+                    .endKafka()
+                .endSpec()
+                .build();
+
+        List<KafkaPool> pools = NodePoolUtils.createKafkaPools(Reconciliation.DUMMY_RECONCILIATION, kafkaAssembly, List.of(POOL_CONTROLLERS, POOL_MIXED, POOL_BROKERS), Map.of(), KafkaVersionTestUtils.DEFAULT_KRAFT_VERSION_CHANGE, SHARED_ENV_PROVIDER);
+        KafkaCluster kc = KafkaCluster.fromCrd(Reconciliation.DUMMY_RECONCILIATION, kafkaAssembly, pools, VERSIONS, KafkaVersionTestUtils.DEFAULT_KRAFT_VERSION_CHANGE, null, SHARED_ENV_PROVIDER, KafkaClusterSecurityContext.DEFAULT_KAFKA_CLUSTER_SECURITY_CONTEXT);
+
+        List<ConfigMap> cms = kc.generatePerBrokerConfigurationConfigMaps(new MetricsAndLogging(null, null), ADVERTISED_HOSTNAMES, ADVERTISED_PORTS, Set.of());
+        for (ConfigMap cm : cms) {
+            String config = cm.getData().get(KafkaCluster.BROKER_CONFIGURATION_FILENAME);
+            assertThat(config, containsString(StrimziMetricsReporterConfig.LISTENER_ENABLE + "=false"));
+            assertThat(config, not(containsString(StrimziMetricsReporterConfig.LISTENER + "=")));
+            assertThat(config, containsString("prometheus.metrics.reporter.otlp.enable=true"));
+            assertThat(config, containsString("prometheus.metrics.reporter.otlp.endpoint=http://my-collector:4317"));
+            assertThat(config, containsString("prometheus.metrics.reporter.otlp.resource.attributes=k8s.namespace.name=" + NAMESPACE + ","));
+            assertThat(config, containsString("service.name=" + CLUSTER + ","));
+        }
+
+        // Metrics are pushed, so nothing has to connect to the pods
+        NetworkPolicy np = kc.generateNetworkPolicy(null, null);
+        assertThat(np.getSpec().getIngress().stream().anyMatch(ing -> ing.getPorts().get(0).getPort().equals(new IntOrString(MetricsModel.METRICS_PORT))), is(false));
+
+        kc.generatePodSets(null, null, node -> Map.of()).forEach(podSet -> PodSetUtils.podSetToPods(podSet).forEach(pod -> {
+            Container container = pod.getSpec().getContainers().get(0);
+            assertThat(container.getPorts().stream().anyMatch(port -> MetricsModel.METRICS_PORT_NAME.equals(port.getName())), is(false));
+            assertThat(container.getEnv().stream().anyMatch(env -> StrimziMetricsReporterModel.ENV_VAR_POD_NAME.equals(env.getName())
+                    && "metadata.name".equals(env.getValueFrom().getFieldRef().getFieldPath())), is(true));
+            assertThat(container.getEnv().stream().anyMatch(env -> StrimziMetricsReporterModel.ENV_VAR_NODE_NAME.equals(env.getName())
+                    && "spec.nodeName".equals(env.getValueFrom().getFieldRef().getFieldPath())), is(true));
+        }));
     }
 
     @Test

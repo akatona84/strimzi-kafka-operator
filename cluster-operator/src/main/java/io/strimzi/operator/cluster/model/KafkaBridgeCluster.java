@@ -459,6 +459,10 @@ public class KafkaBridgeCluster extends AbstractModel implements SupportsLogging
         JvmOptionUtils.jvmPerformanceOptions(varList, jvmOptions);
         JvmOptionUtils.jvmSystemProperties(varList, jvmOptions);
 
+        if (metrics instanceof StrimziMetricsReporterModel reporterModel) {
+            varList.addAll(reporterModel.envVars());
+        }
+
         // Add shared environment variables used for all containers
         varList.addAll(sharedEnvironmentProvider.variables());
 
@@ -678,7 +682,8 @@ public class KafkaBridgeCluster extends AbstractModel implements SupportsLogging
         if (metrics instanceof JmxPrometheusExporterModel jmxPrometheusExporterModel) {
             builder.withJmxPrometheusExporter(jmxPrometheusExporterModel);
         } else if (metrics instanceof StrimziMetricsReporterModel strimziMetricsReporterModel) {
-            builder.withStrimziMetricsReporter(strimziMetricsReporterModel, DEFAULT_METRICS_ALLOW_LIST);
+            builder.withStrimziMetricsReporter(strimziMetricsReporterModel, DEFAULT_METRICS_ALLOW_LIST,
+                    strimziMetricsReporterModel.otlpConfiguration(namespace, cluster, componentName, templateContainer));
         }
 
         data.put(BRIDGE_CONFIGURATION_FILENAME, builder.build());

@@ -190,11 +190,28 @@ public class KafkaBrokerConfigurationBuilder {
      * @return Returns the builder instance
      */
     public KafkaBrokerConfigurationBuilder withStrimziMetricsReporter(MetricsModel model) {
+        return withStrimziMetricsReporter(model, Map.of());
+    }
+
+    /**
+     * Configures the Strimzi Metrics Reporter. It is set only if user enables Strimzi Metrics Reporter.
+     *
+     * @param model                 Strimzi Metrics Reporter configuration
+     * @param otlpConfiguration     OTLP configuration of the reporter, without the reporter prefix. Empty when OTLP is not enabled.
+     *
+     * @return Returns the builder instance
+     */
+    public KafkaBrokerConfigurationBuilder withStrimziMetricsReporter(MetricsModel model, Map<String, String> otlpConfiguration) {
         if (model instanceof StrimziMetricsReporterModel reporterModel) {
             printSectionHeader("Strimzi Metrics Reporter configuration");
-            writer.println(StrimziMetricsReporterConfig.LISTENER_ENABLE + "=true");
-            writer.println(StrimziMetricsReporterConfig.LISTENER + "=http://:" + MetricsModel.METRICS_PORT);
+            if (reporterModel.isPrometheusEndpointEnabled()) {
+                writer.println(StrimziMetricsReporterConfig.LISTENER_ENABLE + "=true");
+                writer.println(StrimziMetricsReporterConfig.LISTENER + "=http://:" + MetricsModel.METRICS_PORT);
+            } else {
+                writer.println(StrimziMetricsReporterConfig.LISTENER_ENABLE + "=false");
+            }
             writer.println(StrimziMetricsReporterConfig.ALLOW_LIST + "=" + reporterModel.getAllowListOrDefault(defaultMetricsAllowList()));
+            otlpConfiguration.forEach((key, value) -> writer.println(StrimziMetricsReporterConfig.PREFIX + key + "=" + value));
             writer.println();
         }
         return this;

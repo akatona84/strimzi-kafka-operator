@@ -720,6 +720,48 @@ public class KafkaBridgeConfigurationBuilderTest {
     }
 
     @Test
+    public void testWithStrimziMetricsReporterWithOtlp() {
+        StrimziMetricsReporterModel model = new StrimziMetricsReporterModel(
+                new KafkaBridgeSpecBuilder()
+                        .withNewStrimziMetricsReporterConfig()
+                                .withNewValues()
+                                    .withAllowList("kafka_producer_producer_metrics.*")
+                                    .withNewPrometheusEndpoint()
+                                        .withEnabled(false)
+                                    .endPrometheusEndpoint()
+                                    .withNewOtlp()
+                                        .withEndpoint("http://my-collector:4317")
+                                        .withIntervalSeconds(30)
+                                    .endOtlp()
+                                .endValues()
+                        .endStrimziMetricsReporterConfig()
+                        .build());
+
+        String configuration = new KafkaBridgeConfigurationBuilder(Reconciliation.DUMMY_RECONCILIATION, BRIDGE_CLUSTER, BRIDGE_BOOTSTRAP_SERVERS)
+                .withStrimziMetricsReporter(model, List.of(), model.otlpConfiguration("my-namespace", "my-bridge", "my-bridge-bridge", null))
+                .build();
+
+        // The Bridge pushes the metrics itself, so the OTLP output of the reporter stays disabled in the Kafka clients
+        assertThat(configuration, isEquivalent(
+                "bridge.id=my-bridge",
+                "kafka.bootstrap.servers=my-cluster-kafka-bootstrap:9092",
+                "bridge.metrics=" + StrimziMetricsReporter.TYPE_STRIMZI_METRICS_REPORTER,
+                "bridge.metrics.endpoint.enable=false",
+                "bridge.metrics.otlp.enable=true",
+                "bridge.metrics.otlp.endpoint=http://my-collector:4317",
+                "bridge.metrics.otlp.interval.seconds=30",
+                "bridge.metrics.otlp.resource.attributes=k8s.namespace.name=my-namespace,"
+                        + "k8s.pod.name=${strimzienv:STRIMZI_POD_NAME},k8s.container.name=my-bridge-bridge,"
+                        + "k8s.node.name=${strimzienv:STRIMZI_NODE_NAME},service.name=my-bridge,"
+                        + "service.namespace=my-namespace,service.instance.id=my-namespace.${strimzienv:STRIMZI_POD_NAME}.my-bridge-bridge",
+                "kafka.metric.reporters=" + StrimziMetricsReporterConfig.CLIENT_CLASS,
+                "kafka." + StrimziMetricsReporterConfig.ALLOW_LIST + "=kafka_producer_producer_metrics.*",
+                "kafka." + StrimziMetricsReporterConfig.LISTENER_ENABLE + "=false",
+                "kafka.security.protocol=PLAINTEXT"
+        ));
+    }
+
+    @Test
     public void testWithStrimziMetricsReporter() {
         StrimziMetricsReporterModel model = new StrimziMetricsReporterModel(
                 new KafkaBridgeSpecBuilder()

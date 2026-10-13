@@ -1418,7 +1418,7 @@ public class KafkaCluster extends AbstractModel implements SupportsMetrics, Supp
         }
 
         // Metrics port is enabled on all node types regardless their role
-        if (metrics != null) {
+        if (metrics != null && metrics.isPrometheusEndpointEnabled()) {
             ports.add(ContainerUtils.createContainerPort(MetricsModel.METRICS_PORT_NAME, MetricsModel.METRICS_PORT));
         }
 
@@ -1646,6 +1646,10 @@ public class KafkaCluster extends AbstractModel implements SupportsMetrics, Supp
 
         varList.addAll(jmx.envVars());
 
+        if (metrics instanceof StrimziMetricsReporterModel reporterModel) {
+            varList.addAll(reporterModel.envVars());
+        }
+
         // Add shared environment variables used for all containers
         varList.addAll(sharedEnvironmentProvider.variables());
 
@@ -1775,7 +1779,7 @@ public class KafkaCluster extends AbstractModel implements SupportsMetrics, Supp
         }
 
         // The Metrics port (if enabled) is opened to all by default
-        if (metrics != null) {
+        if (metrics != null && metrics.isPrometheusEndpointEnabled()) {
             rules.add(NetworkPolicyUtils.createIngressRule(MetricsModel.METRICS_PORT, List.of()));
         }
 
@@ -1882,13 +1886,26 @@ public class KafkaCluster extends AbstractModel implements SupportsMetrics, Supp
                 .withCruiseControl(cluster, ccMetricsReporter, node.broker())
                 .withTieredStorage(cluster, tieredStorage)
                 .withQuotas(cluster, quotas)
-                .withStrimziMetricsReporter(metrics)
+                .withStrimziMetricsReporter(metrics, metricsOtlpConfiguration(pool))
                 .withUserConfiguration(
                         configuration,
                         node.broker() && ccMetricsReporter != null,
                         metrics instanceof JmxPrometheusExporterModel,
                         metrics instanceof StrimziMetricsReporterModel
                 ).build().trim();
+    }
+
+    /**
+     * Gets the OTLP configuration of the Strimzi Metrics Reporter for the nodes of a pool.
+     *
+     * @param pool  Pool to which the nodes belong. Its container template can set the OpenTelemetry service name.
+     *
+     * @return  Map with the OTLP configuration, empty when OTLP is not enabled
+     */
+    private Map<String, String> metricsOtlpConfiguration(KafkaPool pool) {
+        return metrics instanceof StrimziMetricsReporterModel reporterModel
+                ? reporterModel.otlpConfiguration(namespace, cluster, KAFKA_NAME, pool.templateContainer)
+                : Map.of();
     }
 
     /**

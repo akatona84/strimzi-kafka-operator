@@ -32,6 +32,8 @@ include::../../modules/metrics/proc-jmx-exporter-metrics-kafka-deploy-options.ad
 
 include::../../modules/metrics/proc-strimzi-metrics-reporter-kafka-deploy-options.adoc[leveloffset=+1]
 
+include::../../modules/metrics/proc-strimzi-metrics-reporter-otlp.adoc[leveloffset=+1]
+
 include::assembly_metrics-prometheus-deploy.adoc[leveloffset=+1]
 
 include::../../modules/metrics/proc_metrics-deploying-prometheus-alertmanager.adoc[leveloffset=+1]

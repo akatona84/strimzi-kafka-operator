@@ -18,6 +18,7 @@ import io.strimzi.api.kafka.model.common.authentication.KafkaClientAuthenticatio
 import io.strimzi.api.kafka.model.common.authentication.KafkaClientAuthenticationScramSha512Builder;
 import io.strimzi.api.kafka.model.common.authentication.KafkaClientAuthenticationTls;
 import io.strimzi.api.kafka.model.common.authentication.KafkaClientAuthenticationTlsBuilder;
+import io.strimzi.api.kafka.model.common.metrics.OtlpProtocol;
 import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporterBuilder;
 import io.strimzi.api.kafka.model.connect.KafkaConnectSpecBuilder;
 import io.strimzi.operator.cluster.model.metrics.MetricsModel;
@@ -35,6 +36,8 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 import static io.strimzi.operator.cluster.TestUtils.IsEquivalent.isEquivalent;
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.MatcherAssert.assertThat;
 
 @SuppressWarnings("checkstyle:NoFullyQualifiedClassNames") // False positive, fully qualified class name used in a string
@@ -672,6 +675,40 @@ class KafkaConnectConfigurationBuilderTest {
                 .withUserConfiguration(userConfig, injectJmx, injectStrimzi)
                 .build();
         assertThat(actualConfig, isEquivalent(expectedConfig));
+    }
+
+    @Test
+    public void testStrimziMetricsReporterWithOtlp() {
+        StrimziMetricsReporterModel model = new StrimziMetricsReporterModel(
+                new KafkaConnectSpecBuilder()
+                .withMetricsConfig(new StrimziMetricsReporterBuilder()
+                    .withNewValues()
+                        .withAllowList("kafka_connect_connector_metrics.*")
+                        .withNewPrometheusEndpoint()
+                            .withEnabled(false)
+                        .endPrometheusEndpoint()
+                        .withNewOtlp()
+                            .withEndpoint("http://my-collector:4318")
+                            .withProtocol(OtlpProtocol.HTTP_PROTOBUF)
+                        .endOtlp()
+                    .endValues()
+                    .build())
+                .build());
+
+        String configuration = new KafkaConnectConfigurationBuilder(Reconciliation.DUMMY_RECONCILIATION, BOOTSTRAP_SERVERS)
+                .withStrimziMetricsReporter(model, List.of(), model.otlpConfiguration("my-namespace", "my-connect", "my-connect-connect", null))
+                .build();
+
+        // The worker and its clients get the same settings, so they share a single exporter
+        for (String prefix : List.of("", "admin.", "producer.", "consumer.")) {
+            assertThat(configuration, containsString(prefix + StrimziMetricsReporterConfig.LISTENER_ENABLE + "=false\n"));
+            assertThat(configuration, not(containsString(prefix + StrimziMetricsReporterConfig.LISTENER + "=")));
+            assertThat(configuration, containsString(prefix + "prometheus.metrics.reporter.otlp.enable=true\n"));
+            assertThat(configuration, containsString(prefix + "prometheus.metrics.reporter.otlp.endpoint=http://my-collector:4318\n"));
+            assertThat(configuration, containsString(prefix + "prometheus.metrics.reporter.otlp.protocol=http/protobuf\n"));
+            assertThat(configuration, containsString(prefix + "prometheus.metrics.reporter.otlp.resource.attributes=k8s.namespace.name=my-namespace,"
+                    + "k8s.pod.name=${strimzienv:STRIMZI_POD_NAME},k8s.container.name=my-connect-connect,"));
+        }
     }
 
     @Test

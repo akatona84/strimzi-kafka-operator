@@ -8,6 +8,8 @@ import io.opentelemetry.sdk.autoconfigure.AutoConfiguredOpenTelemetrySdk;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Map;
+
 /**
  * Distributed tracing initialization based on OpenTelemetry
  */
@@ -24,9 +26,15 @@ public class OpenTelemetryTracing implements Tracing {
         String serviceName = System.getenv("OTEL_SERVICE_NAME");
         if (serviceName != null) {
             LOGGER.info("Initializing OpenTelemetry tracing with service name {}", serviceName);
-            System.setProperty("otel.metrics.exporter", "none"); // disable otel metrics exporter. This has no effect on metrics in Strimzi.
-            System.setProperty("otel.logs.exporter", "none"); // disable otel logs exporter. This has no effect on logging in Strimzi.
-            AutoConfiguredOpenTelemetrySdk.initialize();
+            AutoConfiguredOpenTelemetrySdk.builder()
+                    // Disables the metrics and logs exporters of the tracing SDK only. This has no effect on metrics and
+                    // logging in Strimzi. Setting them as system properties would also disable other OpenTelemetry SDKs
+                    // in the JVM, such as the one used by the Strimzi Metrics Reporter to push metrics with OTLP.
+                    .addPropertiesCustomizer(config -> Map.of(
+                            "otel.metrics.exporter", "none",
+                            "otel.logs.exporter", "none"))
+                    .setResultAsGlobal()
+                    .build();
         } else {
             LOGGER.error("OpenTelemetry tracing cannot be initialized because OTEL_SERVICE_NAME environment variable is not defined");
         }

@@ -323,6 +323,38 @@ public class KafkaBrokerConfigurationBuilderTest {
     }
 
     @Test
+    public void testStrimziMetricsReporterWithOtlp()  {
+        StrimziMetricsReporterModel model = new StrimziMetricsReporterModel(
+                new KafkaClusterSpecBuilder()
+                        .withMetricsConfig(new StrimziMetricsReporterBuilder()
+                            .withNewValues()
+                                .withAllowList(List.of("kafka_log.*", "kafka_network.*"))
+                                .withNewPrometheusEndpoint()
+                                    .withEnabled(false)
+                                .endPrometheusEndpoint()
+                                .withNewOtlp()
+                                    .withEndpoint("http://my-collector:4317")
+                                .endOtlp()
+                            .endValues()
+                            .build())
+                        .build());
+
+        String configuration = new KafkaBrokerConfigurationBuilder(Reconciliation.DUMMY_RECONCILIATION, NODE_REF, KafkaClusterSecurityContext.DEFAULT_KAFKA_CLUSTER_SECURITY_CONTEXT)
+                .withStrimziMetricsReporter(model, model.otlpConfiguration("my-namespace", "my-cluster", "kafka", null))
+                .build();
+
+        assertThat(configuration, isEquivalent("node.id=2",
+                StrimziMetricsReporterConfig.LISTENER_ENABLE + "=false",
+                StrimziMetricsReporterConfig.ALLOW_LIST + "=kafka_log.*,kafka_network.*",
+                "prometheus.metrics.reporter.otlp.enable=true",
+                "prometheus.metrics.reporter.otlp.endpoint=http://my-collector:4317",
+                "prometheus.metrics.reporter.otlp.resource.attributes=k8s.namespace.name=my-namespace,"
+                        + "k8s.pod.name=${strimzienv:STRIMZI_POD_NAME},k8s.container.name=kafka,"
+                        + "k8s.node.name=${strimzienv:STRIMZI_NODE_NAME},service.name=my-cluster,"
+                        + "service.namespace=my-namespace,service.instance.id=my-namespace.${strimzienv:STRIMZI_POD_NAME}.kafka"));
+    }
+
+    @Test
     public void testStrimziMetricsReporterDefaultAllowListIsRoleBased()  {
         // No custom allow list: each node gets a role-specific default
         StrimziMetricsReporterModel model = new StrimziMetricsReporterModel(

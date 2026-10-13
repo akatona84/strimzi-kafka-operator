@@ -32,6 +32,11 @@
             <artifactId>opentelemetry-sdk-extension-autoconfigure</artifactId>
             <scope>provided</scope>
         </dependency>
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-sdk-extension-autoconfigure-spi</artifactId>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
 
     <build>

@@ -728,6 +728,49 @@ Used in: xref:type-StrimziMetricsReporter-{context}[`StrimziMetricsReporter`]
 |allowList
 |string array
 |A list of regex patterns to filter the metrics to collect. Should contain at least one element.
+|prometheusEndpoint
+|xref:type-StrimziMetricsReporterPrometheusEndpoint-{context}[`StrimziMetricsReporterPrometheusEndpoint`]
+|Configures the endpoint exposing the metrics in the Prometheus format. When not set, the endpoint is enabled.
+|otlp
+|xref:type-StrimziMetricsReporterOtlp-{context}[`StrimziMetricsReporterOtlp`]
+|Enables and configures pushing the metrics to an OTLP endpoint, such as an OpenTelemetry Collector. The same metrics, filtered by the same `allowList`, are pushed and exposed on the Prometheus endpoint.
+|====
+
+[id='type-StrimziMetricsReporterPrometheusEndpoint-{context}']
+= `StrimziMetricsReporterPrometheusEndpoint` schema reference
+
+Used in: xref:type-StrimziMetricsReporterValues-{context}[`StrimziMetricsReporterValues`]
+
+
+[cols="2,2,3a",options="header"]
+|====
+|Property |Property type |Description
+|enabled
+|boolean
+|Whether the metrics are exposed in the Prometheus format for scraping. When disabled, `otlp` must be configured. Defaults to `true`.
+|====
+
+[id='type-StrimziMetricsReporterOtlp-{context}']
+= `StrimziMetricsReporterOtlp` schema reference
+
+Used in: xref:type-StrimziMetricsReporterValues-{context}[`StrimziMetricsReporterValues`]
+
+
+[cols="2,2,3a",options="header"]
+|====
+|Property |Property type |Description
+|endpoint
+|string
+|The OTLP endpoint the metrics are pushed to, for example `http://my-collector:4317`. It must start with `http://` or `https://`. With the `http/protobuf` protocol, the `/v1/metrics` path is appended. When not set, the standard OpenTelemetry configuration applies, for example the `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable set in the container template.
+|protocol
+|string (one of [http/protobuf, grpc])
+|The OTLP transport protocol, either `grpc` or `http/protobuf`. When not set, the standard OpenTelemetry configuration applies, which defaults to `grpc`.
+|intervalSeconds
+|integer
+|The interval in seconds between two pushes. When not set, the standard OpenTelemetry configuration applies, which defaults to 60 seconds.
+|resourceAttributes
+|map
+|Additional resource attributes added to the pushed metrics. They override the attributes set by the operator, such as `service.name`, for the same keys.
 |====
 
 [id='type-InlineLogging-{context}']

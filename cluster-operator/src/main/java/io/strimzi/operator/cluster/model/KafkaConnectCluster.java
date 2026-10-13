@@ -381,7 +381,7 @@ public class KafkaConnectCluster extends AbstractModel implements SupportsMetric
     protected List<ContainerPort> getContainerPortList() {
         List<ContainerPort> portList = new ArrayList<>(2);
         portList.add(ContainerUtils.createContainerPort(REST_API_PORT_NAME, REST_API_PORT));
-        if (metrics != null) {
+        if (metrics != null && metrics.isPrometheusEndpointEnabled()) {
             portList.add(ContainerUtils.createContainerPort(MetricsModel.METRICS_PORT_NAME, MetricsModel.METRICS_PORT));
         }
 
@@ -604,6 +604,10 @@ public class KafkaConnectCluster extends AbstractModel implements SupportsMetric
 
         varList.addAll(jmx.envVars());
 
+        if (metrics instanceof StrimziMetricsReporterModel reporterModel) {
+            varList.addAll(reporterModel.envVars());
+        }
+
         // Add shared environment variables used for all containers
         varList.addAll(sharedEnvironmentProvider.variables());
 
@@ -706,7 +710,7 @@ public class KafkaConnectCluster extends AbstractModel implements SupportsMetric
             rules.add(NetworkPolicyUtils.createIngressRule(REST_API_PORT, List.of(connectPeer, clusterOperatorPeer)));
 
             // The Metrics port (if enabled) is opened to all by default
-            if (metrics != null) {
+            if (metrics != null && metrics.isPrometheusEndpointEnabled()) {
                 rules.add(NetworkPolicyUtils.createIngressRule(MetricsModel.METRICS_PORT, List.of()));
             }
 
@@ -822,6 +826,17 @@ public class KafkaConnectCluster extends AbstractModel implements SupportsMetric
     }
 
     /**
+     * Gets the OTLP configuration of the Strimzi Metrics Reporter.
+     *
+     * @return  Map with the OTLP configuration, empty when OTLP is not enabled
+     */
+    protected Map<String, String> metricsOtlpConfiguration() {
+        return metrics instanceof StrimziMetricsReporterModel reporterModel
+                ? reporterModel.otlpConfiguration(namespace, cluster, componentName, templateContainer)
+                : Map.of();
+    }
+
+    /**
      * Generates a ConfigMap containing Connect configurations.
      * It also generates the metrics and logging configuration. If this operand doesn't support logging
      * or metrics, they will not be set.
@@ -843,7 +858,7 @@ public class KafkaConnectCluster extends AbstractModel implements SupportsMetric
                         .withTls(tls, cluster)
                         .withAuthentication(authentication)
                         .withRackId(rack)
-                        .withStrimziMetricsReporter(metrics, getDefaultMetricsAllowList())
+                        .withStrimziMetricsReporter(metrics, getDefaultMetricsAllowList(), metricsOtlpConfiguration())
                         .withUserConfiguration(
                                 configuration,
                                 metrics instanceof JmxPrometheusExporterModel,
