@@ -12,6 +12,7 @@ import io.strimzi.api.kafka.model.common.metrics.OtlpAuthenticationTls;
 import io.strimzi.api.kafka.model.common.metrics.OtlpResourceAttribute;
 import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporter;
 import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporterOtlp;
+import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporterOtlpValues;
 import io.strimzi.operator.cluster.model.ContainerUtils;
 import io.strimzi.operator.common.InvalidConfigurationException;
 import io.strimzi.operator.common.model.InvalidResourceException;
@@ -57,25 +58,29 @@ public class StrimziMetricsReporterModel implements MetricsModel {
      * The user-configured allow list, or {@code null} when the user did not set one.
      */
     private final List<String> allowList;
-    private final boolean prometheusEndpointEnabled;
-    private final StrimziMetricsReporterOtlp otlp;
+    /**
+     * The OTLP configuration, or {@code null} when the metrics are exposed on the Prometheus endpoint.
+     */
+    private final StrimziMetricsReporterOtlpValues otlp;
 
     /**
      * Stores only the user-configured allow list; the default is resolved later at the call site, as it can
      * depend on the node's role.
      *
+     * The model is used for both the {@code strimziMetricsReporter} type, which exposes the metrics on a Prometheus
+     * endpoint, and the {@code strimziMetricsReporterOtlp} type, which pushes them to an OTLP endpoint.
+     *
      * @param spec Custom resource section configuring metrics.
      */
     public StrimziMetricsReporterModel(HasConfigurableMetrics spec) {
-        if (spec.getMetricsConfig() != null) {
-            StrimziMetricsReporter config = (StrimziMetricsReporter) spec.getMetricsConfig();
+        if (spec.getMetricsConfig() instanceof StrimziMetricsReporter config) {
             validate(config);
             this.allowList = config.getValues() != null ? config.getValues().getAllowList() : null;
-            this.prometheusEndpointEnabled = config.getValues() == null
-                    || config.getValues().getPrometheusEndpoint() == null
-                    || config.getValues().getPrometheusEndpoint().getEnabled() == null
-                    || config.getValues().getPrometheusEndpoint().getEnabled();
-            this.otlp = config.getValues() != null ? config.getValues().getOtlp() : null;
+            this.otlp = null;
+        } else if (spec.getMetricsConfig() instanceof StrimziMetricsReporterOtlp config) {
+            validate(config);
+            this.otlp = config.getValues() != null ? config.getValues() : new StrimziMetricsReporterOtlpValues();
+            this.allowList = this.otlp.getAllowList();
         } else {
             throw new InvalidConfigurationException("Unexpected empty metrics config");
         }
@@ -105,7 +110,7 @@ public class StrimziMetricsReporterModel implements MetricsModel {
 
     @Override
     public boolean isPrometheusEndpointEnabled() {
-        return prometheusEndpointEnabled;
+        return otlp == null;
     }
 
     /**
@@ -268,49 +273,62 @@ public class StrimziMetricsReporterModel implements MetricsModel {
      */
     /* test */ static void validate(StrimziMetricsReporter config) {
         List<String> errors = new ArrayList<>();
-        if (config.getValues() != null && config.getValues().getAllowList() != null) {
-            if (config.getValues().getAllowList().isEmpty()) {
-                errors.add("Allowlist should contain at least one element");
-            }
-
-            for (String regex : config.getValues().getAllowList()) {
-                try {
-                    Pattern.compile(regex);
-                } catch (PatternSyntaxException pse) {
-                    errors.add(String.format("Invalid regex: %s, %s", regex, pse.getDescription()));
-                }
-            }
+        if (config.getValues() != null) {
+            validateAllowList(config.getValues().getAllowList(), errors);
         }
 
-        if (config.getValues() != null) {
-            if (config.getValues().getPrometheusEndpoint() != null
-                    && Boolean.FALSE.equals(config.getValues().getPrometheusEndpoint().getEnabled())
-                    && config.getValues().getOtlp() == null) {
-                errors.add("otlp must be configured when the Prometheus endpoint is disabled");
+        if (!errors.isEmpty()) {
+            throw new InvalidResourceException("Metrics configuration is invalid: " + errors);
+        }
+    }
+
+    /**
+     * Validates user configuration of the Strimzi Metrics Reporter pushing to an OTLP endpoint.
+     *
+     * @param config Config to be validated.
+     *
+     */
+    /* test */ static void validate(StrimziMetricsReporterOtlp config) {
+        List<String> errors = new ArrayList<>();
+        StrimziMetricsReporterOtlpValues values = config.getValues();
+        if (values != null) {
+            validateAllowList(values.getAllowList(), errors);
+
+            if (values.getEndpoint() != null
+                    && !values.getEndpoint().startsWith("http://")
+                    && !values.getEndpoint().startsWith("https://")) {
+                errors.add("OTLP endpoint must start with http:// or https://");
             }
 
-            StrimziMetricsReporterOtlp otlp = config.getValues().getOtlp();
-            if (otlp != null) {
-                if (otlp.getEndpoint() != null
-                        && !otlp.getEndpoint().startsWith("http://")
-                        && !otlp.getEndpoint().startsWith("https://")) {
-                    errors.add("OTLP endpoint must start with http:// or https://");
-                }
+            if (values.getIntervalSeconds() != null && values.getIntervalSeconds() < 1) {
+                errors.add("OTLP interval must be at least 1 second");
+            }
 
-                if (otlp.getIntervalSeconds() != null && otlp.getIntervalSeconds() < 1) {
-                    errors.add("OTLP interval must be at least 1 second");
-                }
-
-                if (otlp.getResourceAttributes() != null) {
-                    for (OtlpResourceAttribute attribute : otlp.getResourceAttributes()) {
-                        validateResourceAttribute(attribute, errors);
-                    }
+            if (values.getResourceAttributes() != null) {
+                for (OtlpResourceAttribute attribute : values.getResourceAttributes()) {
+                    validateResourceAttribute(attribute, errors);
                 }
             }
         }
 
         if (!errors.isEmpty()) {
             throw new InvalidResourceException("Metrics configuration is invalid: " + errors);
+        }
+    }
+
+    private static void validateAllowList(List<String> allowList, List<String> errors) {
+        if (allowList != null) {
+            if (allowList.isEmpty()) {
+                errors.add("Allowlist should contain at least one element");
+            }
+
+            for (String regex : allowList) {
+                try {
+                    Pattern.compile(regex);
+                } catch (PatternSyntaxException pse) {
+                    errors.add(String.format("Invalid regex: %s, %s", regex, pse.getDescription()));
+                }
+            }
         }
     }
 

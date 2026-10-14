@@ -8,7 +8,6 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import io.strimzi.api.kafka.model.common.Constants;
 import io.strimzi.api.kafka.model.common.UnknownPropertyPreserving;
-import io.strimzi.crdgenerator.annotations.CelValidation;
 import io.strimzi.crdgenerator.annotations.Description;
 import io.sundr.builder.annotations.Buildable;
 import lombok.EqualsAndHashCode;
@@ -26,20 +25,11 @@ import java.util.Map;
         builderPackage = Constants.FABRIC8_KUBERNETES_API
 )
 @JsonInclude(JsonInclude.Include.NON_NULL)
-@JsonPropertyOrder({"allowList", "prometheusEndpoint", "otlp"})
-@CelValidation(rules = {
-    @CelValidation.CelValidationRule(
-        // At least one output has to be enabled
-        rule = "!has(self.prometheusEndpoint) || !has(self.prometheusEndpoint.enabled) || self.prometheusEndpoint.enabled || has(self.otlp)",
-        message = "otlp must be configured when the Prometheus endpoint is disabled"
-        )
-})
+@JsonPropertyOrder({"allowList"})
 @EqualsAndHashCode
 @ToString
 public class StrimziMetricsReporterValues implements UnknownPropertyPreserving {
     private List<String> allowList;
-    private StrimziMetricsReporterPrometheusEndpoint prometheusEndpoint;
-    private StrimziMetricsReporterOtlp otlp;
     private Map<String, Object> additionalProperties;
 
     @Description("A list of regex patterns to filter the metrics to collect. Should contain at least one element.")
@@ -50,28 +40,6 @@ public class StrimziMetricsReporterValues implements UnknownPropertyPreserving {
 
     public void setAllowList(List<String> allowList) {
         this.allowList = allowList;
-    }
-
-    @Description("Configures the endpoint exposing the metrics in the Prometheus format. " +
-            "When not set, the endpoint is enabled.")
-    @JsonInclude(value = JsonInclude.Include.NON_NULL)
-    public StrimziMetricsReporterPrometheusEndpoint getPrometheusEndpoint() {
-        return prometheusEndpoint;
-    }
-
-    public void setPrometheusEndpoint(StrimziMetricsReporterPrometheusEndpoint prometheusEndpoint) {
-        this.prometheusEndpoint = prometheusEndpoint;
-    }
-
-    @Description("Enables and configures pushing the metrics to an OTLP endpoint, such as an OpenTelemetry Collector. " +
-            "The same metrics, filtered by the same `allowList`, are pushed and exposed on the Prometheus endpoint.")
-    @JsonInclude(value = JsonInclude.Include.NON_NULL)
-    public StrimziMetricsReporterOtlp getOtlp() {
-        return otlp;
-    }
-
-    public void setOtlp(StrimziMetricsReporterOtlp otlp) {
-        this.otlp = otlp;
     }
 
     @Override

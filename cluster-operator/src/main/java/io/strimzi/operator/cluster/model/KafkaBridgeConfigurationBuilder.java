@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 
 import static io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporter.TYPE_STRIMZI_METRICS_REPORTER;
+import static io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporterOtlp.TYPE_STRIMZI_METRICS_REPORTER_OTLP;
 import static io.strimzi.operator.cluster.model.KafkaBridgeCluster.HTTP_SERVER_CERTS_BASE_VOLUME_MOUNT;
 import static io.strimzi.operator.cluster.model.KafkaBridgeCluster.KAFKA_BRIDGE_CONFIG_VOLUME_MOUNT;
 
@@ -377,11 +378,11 @@ public class KafkaBridgeConfigurationBuilder {
     public KafkaBridgeConfigurationBuilder withStrimziMetricsReporter(StrimziMetricsReporterModel model, List<String> defaultAllowList, Map<String, String> otlpConfiguration)   {
         if (model != null) {
             printSectionHeader("Strimzi Metrics Reporter configuration");
-            writer.println("bridge.metrics=" + TYPE_STRIMZI_METRICS_REPORTER);
-            if (!model.isPrometheusEndpointEnabled()) {
-                writer.println("bridge.metrics.endpoint.enable=false");
-            }
-            otlpConfiguration.forEach((key, value) -> writer.println("bridge.metrics." + key + "=" + value));
+            writer.println("bridge.metrics=" + (model.isOtlpEnabled() ? TYPE_STRIMZI_METRICS_REPORTER_OTLP : TYPE_STRIMZI_METRICS_REPORTER));
+            // The OTLP push is selected by the bridge.metrics type, so the Bridge does not need the enable option
+            otlpConfiguration.entrySet().stream()
+                    .filter(entry -> !StrimziMetricsReporterConfig.OTLP_ENABLE.equals(entry.getKey()))
+                    .forEach(entry -> writer.println("bridge.metrics." + entry.getKey() + "=" + entry.getValue()));
             // the kafka. prefix is required by the Bridge to pass Kafka client configurations
             writer.println("kafka.metric.reporters=" + StrimziMetricsReporterConfig.CLIENT_CLASS);
             writer.println("kafka." + StrimziMetricsReporterConfig.LISTENER_ENABLE + "=false");

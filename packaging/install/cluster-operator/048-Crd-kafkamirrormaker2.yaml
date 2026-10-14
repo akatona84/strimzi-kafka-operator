@@ -604,7 +604,8 @@ spec:
                     enum:
                     - jmxPrometheusExporter
                     - strimziMetricsReporter
-                    description: Metrics type. The supported types are `jmxPrometheusExporter` and `strimziMetricsReporter`. Type `jmxPrometheusExporter` uses the Prometheus JMX Exporter to expose Kafka JMX metrics in Prometheus format through an HTTP endpoint. Type `strimziMetricsReporter` uses the Strimzi Metrics Reporter to directly expose Kafka metrics in Prometheus format through an HTTP endpoint.
+                    - strimziMetricsReporterOtlp
+                    description: "Metrics type. The supported types are `jmxPrometheusExporter`, `strimziMetricsReporter` and `strimziMetricsReporterOtlp`. Type `jmxPrometheusExporter` uses the Prometheus JMX Exporter to expose Kafka JMX metrics in Prometheus format through an HTTP endpoint. Type `strimziMetricsReporter` uses the Strimzi Metrics Reporter to directly expose Kafka metrics in Prometheus format through an HTTP endpoint. Type `strimziMetricsReporterOtlp` uses the Strimzi Metrics Reporter to push Kafka metrics to an OTLP endpoint, such as an OpenTelemetry Collector."
                   valueFrom:
                     type: object
                     properties:
@@ -627,130 +628,116 @@ spec:
                         items:
                           type: string
                         description: A list of regex patterns to filter the metrics to collect. Should contain at least one element.
-                      prometheusEndpoint:
+                      endpoint:
+                        type: string
+                        description: "The OTLP endpoint the metrics are pushed to, in the `http://<HOST>:<PORT>` or `https://<HOST>:<PORT>` format, for example `http://my-collector:4317`. With the `http/protobuf` protocol, the `/v1/metrics` path is appended. When not set, the standard OpenTelemetry configuration applies, for example the `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable set in the container template. Only used with the `strimziMetricsReporterOtlp` type."
+                      protocol:
+                        type: string
+                        enum:
+                        - grpc
+                        - http/protobuf
+                        description: "The OTLP transport protocol, either `grpc` or `http/protobuf`. When not set, the standard OpenTelemetry configuration applies, which defaults to `grpc`. Only used with the `strimziMetricsReporterOtlp` type."
+                      intervalSeconds:
+                        type: integer
+                        minimum: 1
+                        description: "The interval in seconds between two pushes. When not set, the standard OpenTelemetry configuration applies, which defaults to 60 seconds. Only used with the `strimziMetricsReporterOtlp` type."
+                      resourceAttributes:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            name:
+                              type: string
+                              description: "The name of the resource attribute, for example `k8s.pod.name`."
+                            value:
+                              type: string
+                              description: The value of the resource attribute.
+                            valueFrom:
+                              type: object
+                              properties:
+                                fieldRef:
+                                  type: object
+                                  properties:
+                                    apiVersion:
+                                      type: string
+                                    fieldPath:
+                                      type: string
+                                  description: "Selects a field of the pod, in the same way as the Kubernetes Downward API for environment variables. Supported fields are `metadata.name`, `metadata.namespace`, `metadata.uid`, `metadata.labels['<KEY>']`, `metadata.annotations['<KEY>']`, `spec.nodeName`, `spec.serviceAccountName`, `status.hostIP`, `status.hostIPs`, `status.podIP` and `status.podIPs`."
+                              required:
+                              - fieldRef
+                              description: Reference to a field of the pod from which the value of the resource attribute is taken.
+                          oneOf:
+                          - properties:
+                              value: {}
+                            required:
+                            - value
+                          - properties:
+                              valueFrom: {}
+                            required:
+                            - valueFrom
+                          required:
+                          - name
+                        description: "Resource attributes added to the pushed metrics, for example to identify the pod they come from. Each attribute has a `name`, and either a static `value` or a `valueFrom` taking the value from a field of the pod. No resource attributes are added by default. Only used with the `strimziMetricsReporterOtlp` type."
+                      tls:
                         type: object
                         properties:
-                          enabled:
-                            type: boolean
-                            description: "Whether the metrics are exposed in the Prometheus format for scraping. When disabled, `otlp` must be configured. Defaults to `true`."
-                        description: "Configures the endpoint exposing the metrics in the Prometheus format. When not set, the endpoint is enabled."
-                      otlp:
-                        type: object
-                        properties:
-                          endpoint:
-                            type: string
-                            description: "The OTLP endpoint the metrics are pushed to, in the `http://<HOST>:<PORT>` or `https://<HOST>:<PORT>` format, for example `http://my-collector:4317`. With the `http/protobuf` protocol, the `/v1/metrics` path is appended. When not set, the standard OpenTelemetry configuration applies, for example the `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable set in the container template."
-                          protocol:
-                            type: string
-                            enum:
-                            - grpc
-                            - http/protobuf
-                            description: "The OTLP transport protocol, either `grpc` or `http/protobuf`. When not set, the standard OpenTelemetry configuration applies, which defaults to `grpc`."
-                          intervalSeconds:
-                            type: integer
-                            minimum: 1
-                            description: "The interval in seconds between two pushes. When not set, the standard OpenTelemetry configuration applies, which defaults to 60 seconds."
-                          resourceAttributes:
+                          trustedCertificates:
                             type: array
                             items:
                               type: object
                               properties:
-                                name:
+                                secretName:
                                   type: string
-                                  description: "The name of the resource attribute, for example `k8s.pod.name`."
-                                value:
+                                  description: The name of the Secret containing the certificate.
+                                certificate:
                                   type: string
-                                  description: The value of the resource attribute.
-                                valueFrom:
-                                  type: object
-                                  properties:
-                                    fieldRef:
-                                      type: object
-                                      properties:
-                                        apiVersion:
-                                          type: string
-                                        fieldPath:
-                                          type: string
-                                      description: "Selects a field of the pod, in the same way as the Kubernetes Downward API for environment variables. Supported fields are `metadata.name`, `metadata.namespace`, `metadata.uid`, `metadata.labels['<KEY>']`, `metadata.annotations['<KEY>']`, `spec.nodeName`, `spec.serviceAccountName`, `status.hostIP`, `status.hostIPs`, `status.podIP` and `status.podIPs`."
-                                  required:
-                                  - fieldRef
-                                  description: Reference to a field of the pod from which the value of the resource attribute is taken.
+                                  description: The name of the file certificate in the secret.
+                                pattern:
+                                  type: string
+                                  description: "Pattern for the certificate files in the secret. Use the link:https://en.wikipedia.org/wiki/Glob_(programming)[_glob syntax_] for the pattern. All files in the secret that match the pattern are used."
                               oneOf:
                               - properties:
-                                  value: {}
+                                  certificate: {}
                                 required:
-                                - value
-                              - properties:
-                                  valueFrom: {}
-                                required:
-                                - valueFrom
-                              required:
-                              - name
-                            description: "Resource attributes added to the pushed metrics, for example to identify the pod they come from. Each attribute has a `name`, and either a static `value` or a `valueFrom` taking the value from a field of the pod. No resource attributes are added by default."
-                          tls:
-                            type: object
-                            properties:
-                              trustedCertificates:
-                                type: array
-                                items:
-                                  type: object
-                                  properties:
-                                    secretName:
-                                      type: string
-                                      description: The name of the Secret containing the certificate.
-                                    certificate:
-                                      type: string
-                                      description: The name of the file certificate in the secret.
-                                    pattern:
-                                      type: string
-                                      description: "Pattern for the certificate files in the secret. Use the link:https://en.wikipedia.org/wiki/Glob_(programming)[_glob syntax_] for the pattern. All files in the secret that match the pattern are used."
-                                  oneOf:
-                                  - properties:
-                                      certificate: {}
-                                    required:
-                                    - certificate
-                                  - properties:
-                                      pattern: {}
-                                    required:
-                                    - pattern
-                                  required:
-                                  - secretName
-                                description: Trusted certificates for TLS connection.
-                            description: "TLS configuration for connecting to an `https://` OTLP endpoint. When `trustedCertificates` is not set, the server certificate is verified against the default JVM trust store."
-                          authentication:
-                            type: object
-                            properties:
-                              certificateAndKey:
-                                type: object
-                                properties:
-                                  secretName:
-                                    type: string
-                                    description: The name of the Secret containing the certificate.
-                                  certificate:
-                                    type: string
-                                    description: The name of the file certificate in the Secret.
-                                  key:
-                                    type: string
-                                    description: "The name of the private key in the secret. The private key must be in unencrypted PKCS #8 format. For more information, see RFC 5208: https://datatracker.ietf.org/doc/html/rfc5208."
-                                required:
-                                - secretName
                                 - certificate
-                                - key
-                                description: "Reference to the `Secret` which holds the client certificate and private key pair, in PEM format."
-                              type:
+                              - properties:
+                                  pattern: {}
+                                required:
+                                - pattern
+                              required:
+                              - secretName
+                            description: Trusted certificates for TLS connection.
+                        description: "TLS configuration for connecting to an `https://` OTLP endpoint. When `trustedCertificates` is not set, the server certificate is verified against the default JVM trust store. Only used with the `strimziMetricsReporterOtlp` type."
+                      authentication:
+                        type: object
+                        properties:
+                          certificateAndKey:
+                            type: object
+                            properties:
+                              secretName:
                                 type: string
-                                enum:
-                                - tls
-                                description: "Specifies the authentication type. The supported type is `tls`, which uses TLS client authentication (mTLS) and is supported only with `https://` endpoints."
+                                description: The name of the Secret containing the certificate.
+                              certificate:
+                                type: string
+                                description: The name of the file certificate in the Secret.
+                              key:
+                                type: string
+                                description: "The name of the private key in the secret. The private key must be in unencrypted PKCS #8 format. For more information, see RFC 5208: https://datatracker.ietf.org/doc/html/rfc5208."
                             required:
-                            - certificateAndKey
-                            - type
-                            description: Authentication configuration for connecting to the OTLP endpoint.
-                        description: "Enables and configures pushing the metrics to an OTLP endpoint, such as an OpenTelemetry Collector. The same metrics, filtered by the same `allowList`, are pushed and exposed on the Prometheus endpoint."
+                            - secretName
+                            - certificate
+                            - key
+                            description: "Reference to the `Secret` which holds the client certificate and private key pair, in PEM format."
+                          type:
+                            type: string
+                            enum:
+                            - tls
+                            description: "Specifies the authentication type. The supported type is `tls`, which uses TLS client authentication (mTLS) and is supported only with `https://` endpoints."
+                        required:
+                        - certificateAndKey
+                        - type
+                        description: Authentication configuration for connecting to the OTLP endpoint. Only used with the `strimziMetricsReporterOtlp` type.
                     description: Configuration values for the Strimzi Metrics Reporter.
-                    x-kubernetes-validations:
-                    - rule: '!has(self.prometheusEndpoint) || !has(self.prometheusEndpoint.enabled) || self.prometheusEndpoint.enabled || has(self.otlp)'
-                      message: otlp must be configured when the Prometheus endpoint is disabled
                 required:
                 - type
                 description: Metrics configuration.

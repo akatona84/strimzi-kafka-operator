@@ -58,6 +58,7 @@ import io.strimzi.api.kafka.model.common.metrics.JmxPrometheusExporterMetricsBui
 import io.strimzi.api.kafka.model.common.metrics.MetricsConfig;
 import io.strimzi.api.kafka.model.common.metrics.OtlpResourceAttributeBuilder;
 import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporterBuilder;
+import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporterOtlpBuilder;
 import io.strimzi.api.kafka.model.common.template.AdditionalTemplatedVolume;
 import io.strimzi.api.kafka.model.common.template.AdditionalTemplatedVolumeBuilder;
 import io.strimzi.api.kafka.model.common.template.AdditionalVolume;
@@ -1506,30 +1507,25 @@ public class KafkaConnectClusterTest {
 
     @Test
     public void testStrimziMetricsReporterWithOtlpConfig() {
-        MetricsConfig metrics = new StrimziMetricsReporterBuilder()
+        MetricsConfig metrics = new StrimziMetricsReporterOtlpBuilder()
                 .withNewValues()
-                    .withNewPrometheusEndpoint()
-                        .withEnabled(false)
-                    .endPrometheusEndpoint()
-                    .withNewOtlp()
-                        .withEndpoint("https://my-collector:4317")
-                        .withResourceAttributes(new OtlpResourceAttributeBuilder()
-                                .withName("k8s.pod.name")
-                                .withNewValueFrom()
-                        .withFieldRef(new ObjectFieldSelectorBuilder().withFieldPath("metadata.name").build())
-                                .endValueFrom()
-                                .build())
-                        .withNewTls()
-                            .withTrustedCertificates(new CertSecretSourceBuilder().withSecretName("collector-ca").withCertificate("ca.crt").build())
-                        .endTls()
-                        .withNewOtlpAuthenticationTls()
-                            .withNewCertificateAndKey()
-                                .withSecretName("my-otlp-client")
-                                .withCertificate("tls.crt")
-                                .withKey("tls.key")
-                            .endCertificateAndKey()
-                        .endOtlpAuthenticationTls()
-                    .endOtlp()
+                    .withEndpoint("https://my-collector:4317")
+                    .withResourceAttributes(new OtlpResourceAttributeBuilder()
+                            .withName("k8s.pod.name")
+                            .withNewValueFrom()
+                                .withFieldRef(new ObjectFieldSelectorBuilder().withFieldPath("metadata.name").build())
+                            .endValueFrom()
+                            .build())
+                    .withNewTls()
+                        .withTrustedCertificates(new CertSecretSourceBuilder().withSecretName("collector-ca").withCertificate("ca.crt").build())
+                    .endTls()
+                    .withNewOtlpAuthenticationTls()
+                        .withNewCertificateAndKey()
+                            .withSecretName("my-otlp-client")
+                            .withCertificate("tls.crt")
+                            .withKey("tls.key")
+                        .endCertificateAndKey()
+                    .endOtlpAuthenticationTls()
                 .endValues().build();
 
         KafkaConnect kafkaConnect = new KafkaConnectBuilder(RESOURCE)

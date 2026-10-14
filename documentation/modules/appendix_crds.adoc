@@ -103,7 +103,7 @@ include::../api/io.strimzi.api.kafka.model.kafka.KafkaClusterSpec.adoc[leveloffs
 |xref:type-KafkaJmxOptions-{context}[`KafkaJmxOptions`]
 |JMX Options for Kafka brokers.
 |metricsConfig
-|xref:type-JmxPrometheusExporterMetrics-{context}[`JmxPrometheusExporterMetrics`], xref:type-StrimziMetricsReporter-{context}[`StrimziMetricsReporter`]
+|xref:type-JmxPrometheusExporterMetrics-{context}[`JmxPrometheusExporterMetrics`], xref:type-StrimziMetricsReporter-{context}[`StrimziMetricsReporter`], xref:type-StrimziMetricsReporterOtlp-{context}[`StrimziMetricsReporterOtlp`]
 |Metrics configuration.
 |logging
 |xref:type-InlineLogging-{context}[`InlineLogging`], xref:type-ExternalLogging-{context}[`ExternalLogging`]
@@ -670,7 +670,7 @@ It must have the value `password` for the type `KafkaJmxAuthenticationPassword`.
 Used in: xref:type-CruiseControlSpec-{context}[`CruiseControlSpec`], xref:type-KafkaBridgeSpec-{context}[`KafkaBridgeSpec`], xref:type-KafkaClusterSpec-{context}[`KafkaClusterSpec`], xref:type-KafkaConnectSpec-{context}[`KafkaConnectSpec`], xref:type-KafkaMirrorMaker2Spec-{context}[`KafkaMirrorMaker2Spec`]
 
 
-The `type` property is a discriminator that distinguishes use of the `JmxPrometheusExporterMetrics` type from xref:type-StrimziMetricsReporter-{context}[`StrimziMetricsReporter`].
+The `type` property is a discriminator that distinguishes use of the `JmxPrometheusExporterMetrics` type from xref:type-StrimziMetricsReporter-{context}[`StrimziMetricsReporter`], xref:type-StrimziMetricsReporterOtlp-{context}[`StrimziMetricsReporterOtlp`].
 It must have the value `jmxPrometheusExporter` for the type `JmxPrometheusExporterMetrics`.
 [cols="2,2,3a",options="header"]
 |====
@@ -703,7 +703,7 @@ Used in: xref:type-ExternalLogging-{context}[`ExternalLogging`], xref:type-JmxPr
 Used in: xref:type-CruiseControlSpec-{context}[`CruiseControlSpec`], xref:type-KafkaBridgeSpec-{context}[`KafkaBridgeSpec`], xref:type-KafkaClusterSpec-{context}[`KafkaClusterSpec`], xref:type-KafkaConnectSpec-{context}[`KafkaConnectSpec`], xref:type-KafkaMirrorMaker2Spec-{context}[`KafkaMirrorMaker2Spec`]
 
 
-The `type` property is a discriminator that distinguishes use of the `StrimziMetricsReporter` type from xref:type-JmxPrometheusExporterMetrics-{context}[`JmxPrometheusExporterMetrics`].
+The `type` property is a discriminator that distinguishes use of the `StrimziMetricsReporter` type from xref:type-JmxPrometheusExporterMetrics-{context}[`JmxPrometheusExporterMetrics`], xref:type-StrimziMetricsReporterOtlp-{context}[`StrimziMetricsReporterOtlp`].
 It must have the value `strimziMetricsReporter` for the type `StrimziMetricsReporter`.
 [cols="2,2,3a",options="header"]
 |====
@@ -728,61 +728,63 @@ Used in: xref:type-StrimziMetricsReporter-{context}[`StrimziMetricsReporter`]
 |allowList
 |string array
 |A list of regex patterns to filter the metrics to collect. Should contain at least one element.
-|prometheusEndpoint
-|xref:type-StrimziMetricsReporterPrometheusEndpoint-{context}[`StrimziMetricsReporterPrometheusEndpoint`]
-|Configures the endpoint exposing the metrics in the Prometheus format. When not set, the endpoint is enabled.
-|otlp
-|xref:type-StrimziMetricsReporterOtlp-{context}[`StrimziMetricsReporterOtlp`]
-|Enables and configures pushing the metrics to an OTLP endpoint, such as an OpenTelemetry Collector. The same metrics, filtered by the same `allowList`, are pushed and exposed on the Prometheus endpoint.
-|====
-
-[id='type-StrimziMetricsReporterPrometheusEndpoint-{context}']
-= `StrimziMetricsReporterPrometheusEndpoint` schema reference
-
-Used in: xref:type-StrimziMetricsReporterValues-{context}[`StrimziMetricsReporterValues`]
-
-
-[cols="2,2,3a",options="header"]
-|====
-|Property |Property type |Description
-|enabled
-|boolean
-|Whether the metrics are exposed in the Prometheus format for scraping. When disabled, `otlp` must be configured. Defaults to `true`.
 |====
 
 [id='type-StrimziMetricsReporterOtlp-{context}']
 = `StrimziMetricsReporterOtlp` schema reference
 
-Used in: xref:type-StrimziMetricsReporterValues-{context}[`StrimziMetricsReporterValues`]
+Used in: xref:type-CruiseControlSpec-{context}[`CruiseControlSpec`], xref:type-KafkaBridgeSpec-{context}[`KafkaBridgeSpec`], xref:type-KafkaClusterSpec-{context}[`KafkaClusterSpec`], xref:type-KafkaConnectSpec-{context}[`KafkaConnectSpec`], xref:type-KafkaMirrorMaker2Spec-{context}[`KafkaMirrorMaker2Spec`]
+
+
+The `type` property is a discriminator that distinguishes use of the `StrimziMetricsReporterOtlp` type from xref:type-JmxPrometheusExporterMetrics-{context}[`JmxPrometheusExporterMetrics`], xref:type-StrimziMetricsReporter-{context}[`StrimziMetricsReporter`].
+It must have the value `strimziMetricsReporterOtlp` for the type `StrimziMetricsReporterOtlp`.
+[cols="2,2,3a",options="header"]
+|====
+|Property |Property type |Description
+|type
+|string
+|Must be `strimziMetricsReporterOtlp`.
+|values
+|xref:type-StrimziMetricsReporterOtlpValues-{context}[`StrimziMetricsReporterOtlpValues`]
+|Configuration values for the Strimzi Metrics Reporter.
+|====
+
+[id='type-StrimziMetricsReporterOtlpValues-{context}']
+= `StrimziMetricsReporterOtlpValues` schema reference
+
+Used in: xref:type-StrimziMetricsReporterOtlp-{context}[`StrimziMetricsReporterOtlp`]
 
 
 [cols="2,2,3a",options="header"]
 |====
 |Property |Property type |Description
+|allowList
+|string array
+|A list of regex patterns to filter the metrics to collect. Should contain at least one element.
 |endpoint
 |string
-|The OTLP endpoint the metrics are pushed to, in the `http://<HOST>:<PORT>` or `https://<HOST>:<PORT>` format, for example `http://my-collector:4317`. With the `http/protobuf` protocol, the `/v1/metrics` path is appended. When not set, the standard OpenTelemetry configuration applies, for example the `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable set in the container template.
+|The OTLP endpoint the metrics are pushed to, in the `http://<HOST>:<PORT>` or `https://<HOST>:<PORT>` format, for example `http://my-collector:4317`. With the `http/protobuf` protocol, the `/v1/metrics` path is appended. When not set, the standard OpenTelemetry configuration applies, for example the `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable set in the container template. Only used with the `strimziMetricsReporterOtlp` type.
 |protocol
 |string (one of [http/protobuf, grpc])
-|The OTLP transport protocol, either `grpc` or `http/protobuf`. When not set, the standard OpenTelemetry configuration applies, which defaults to `grpc`.
+|The OTLP transport protocol, either `grpc` or `http/protobuf`. When not set, the standard OpenTelemetry configuration applies, which defaults to `grpc`. Only used with the `strimziMetricsReporterOtlp` type.
 |intervalSeconds
 |integer
-|The interval in seconds between two pushes. When not set, the standard OpenTelemetry configuration applies, which defaults to 60 seconds.
+|The interval in seconds between two pushes. When not set, the standard OpenTelemetry configuration applies, which defaults to 60 seconds. Only used with the `strimziMetricsReporterOtlp` type.
 |resourceAttributes
 |xref:type-OtlpResourceAttribute-{context}[`OtlpResourceAttribute`] array
-|Resource attributes added to the pushed metrics, for example to identify the pod they come from. Each attribute has a `name`, and either a static `value` or a `valueFrom` taking the value from a field of the pod. No resource attributes are added by default.
+|Resource attributes added to the pushed metrics, for example to identify the pod they come from. Each attribute has a `name`, and either a static `value` or a `valueFrom` taking the value from a field of the pod. No resource attributes are added by default. Only used with the `strimziMetricsReporterOtlp` type.
 |tls
 |xref:type-ClientTls-{context}[`ClientTls`]
-|TLS configuration for connecting to an `https://` OTLP endpoint. When `trustedCertificates` is not set, the server certificate is verified against the default JVM trust store.
+|TLS configuration for connecting to an `https://` OTLP endpoint. When `trustedCertificates` is not set, the server certificate is verified against the default JVM trust store. Only used with the `strimziMetricsReporterOtlp` type.
 |authentication
 |xref:type-OtlpAuthenticationTls-{context}[`OtlpAuthenticationTls`]
-|Authentication configuration for connecting to the OTLP endpoint.
+|Authentication configuration for connecting to the OTLP endpoint. Only used with the `strimziMetricsReporterOtlp` type.
 |====
 
 [id='type-OtlpResourceAttribute-{context}']
 = `OtlpResourceAttribute` schema reference
 
-Used in: xref:type-StrimziMetricsReporterOtlp-{context}[`StrimziMetricsReporterOtlp`]
+Used in: xref:type-StrimziMetricsReporterOtlpValues-{context}[`StrimziMetricsReporterOtlpValues`]
 
 
 [cols="2,2,3a",options="header"]
@@ -816,7 +818,7 @@ Used in: xref:type-OtlpResourceAttribute-{context}[`OtlpResourceAttribute`]
 [id='type-ClientTls-{context}']
 = `ClientTls` schema reference
 
-Used in: xref:type-KafkaBridgeSpec-{context}[`KafkaBridgeSpec`], xref:type-KafkaConnectSpec-{context}[`KafkaConnectSpec`], xref:type-KafkaMirrorMaker2ClusterSpec-{context}[`KafkaMirrorMaker2ClusterSpec`], xref:type-KafkaMirrorMaker2TargetClusterSpec-{context}[`KafkaMirrorMaker2TargetClusterSpec`], xref:type-StrimziMetricsReporterOtlp-{context}[`StrimziMetricsReporterOtlp`]
+Used in: xref:type-KafkaBridgeSpec-{context}[`KafkaBridgeSpec`], xref:type-KafkaConnectSpec-{context}[`KafkaConnectSpec`], xref:type-KafkaMirrorMaker2ClusterSpec-{context}[`KafkaMirrorMaker2ClusterSpec`], xref:type-KafkaMirrorMaker2TargetClusterSpec-{context}[`KafkaMirrorMaker2TargetClusterSpec`], xref:type-StrimziMetricsReporterOtlpValues-{context}[`StrimziMetricsReporterOtlpValues`]
 
 xref:type-ClientTls-schema-{context}[Full list of `ClientTls` schema properties]
 
@@ -857,7 +859,7 @@ Used in: xref:type-ClientTls-{context}[`ClientTls`]
 [id='type-OtlpAuthenticationTls-{context}']
 = `OtlpAuthenticationTls` schema reference
 
-Used in: xref:type-StrimziMetricsReporterOtlp-{context}[`StrimziMetricsReporterOtlp`]
+Used in: xref:type-StrimziMetricsReporterOtlpValues-{context}[`StrimziMetricsReporterOtlpValues`]
 
 
 The `type` property is a discriminator that distinguishes use of the `OtlpAuthenticationTls` type from other subtypes that may be added in the future.
@@ -1771,8 +1773,8 @@ include::../api/io.strimzi.api.kafka.model.kafka.cruisecontrol.CruiseControlSpec
 |map
 |The Cruise Control configuration. For a full list of configuration options refer to https://github.com/linkedin/cruise-control/wiki/Configurations. Note that properties with the following prefixes cannot be set: bootstrap.servers, client.id, zookeeper., network., security., failed.brokers.zk.path,webserver.http., webserver.ssl., webserver.api.urlprefix, webserver.session.path, webserver.accesslog., two.step., request.reason.required,metric.reporter.sampler.bootstrap.servers, capacity.config.file, self.healing., ssl., kafka.broker.failure.detection.enable, topic.config.provider.class (with the exception of: ssl.cipher.suites, ssl.protocol, ssl.enabled.protocols, webserver.http.cors.enabled, webserver.http.cors.origin, webserver.http.cors.exposeheaders, webserver.security.enable).
 |metricsConfig
-|xref:type-JmxPrometheusExporterMetrics-{context}[`JmxPrometheusExporterMetrics`], xref:type-StrimziMetricsReporter-{context}[`StrimziMetricsReporter`]
-|Metrics configuration. Only `jmxPrometheusExporter` can be configured, as this component does not support `strimziMetricsReporter`.
+|xref:type-JmxPrometheusExporterMetrics-{context}[`JmxPrometheusExporterMetrics`], xref:type-StrimziMetricsReporter-{context}[`StrimziMetricsReporter`], xref:type-StrimziMetricsReporterOtlp-{context}[`StrimziMetricsReporterOtlp`]
+|Metrics configuration. Only `jmxPrometheusExporter` can be configured, as this component does not support `strimziMetricsReporter` and `strimziMetricsReporterOtlp`.
 |apiUsers
 |xref:type-HashLoginServiceApiUsers-{context}[`HashLoginServiceApiUsers`]
 |Configuration of the Cruise Control REST API users.
@@ -2254,7 +2256,7 @@ include::../api/io.strimzi.api.kafka.model.connect.KafkaConnectSpec.adoc[levelof
 |xref:type-TopologyLabelRack-{context}[`TopologyLabelRack`], xref:type-EnvironmentVariableRack-{context}[`EnvironmentVariableRack`]
 |Configuration of the node label which will be used as the `client.rack` consumer configuration.
 |metricsConfig
-|xref:type-JmxPrometheusExporterMetrics-{context}[`JmxPrometheusExporterMetrics`], xref:type-StrimziMetricsReporter-{context}[`StrimziMetricsReporter`]
+|xref:type-JmxPrometheusExporterMetrics-{context}[`JmxPrometheusExporterMetrics`], xref:type-StrimziMetricsReporter-{context}[`StrimziMetricsReporter`], xref:type-StrimziMetricsReporterOtlp-{context}[`StrimziMetricsReporterOtlp`]
 |Metrics configuration.
 |tracing
 |xref:type-OpenTelemetryTracing-{context}[`OpenTelemetryTracing`]
@@ -3333,7 +3335,7 @@ include::../api/io.strimzi.api.kafka.model.bridge.KafkaBridgeSpec.adoc[leveloffs
 |xref:type-TopologyLabelRack-{context}[`TopologyLabelRack`], xref:type-EnvironmentVariableRack-{context}[`EnvironmentVariableRack`]
 |Configuration of the node label which will be used as the client.rack consumer configuration.
 |metricsConfig
-|xref:type-JmxPrometheusExporterMetrics-{context}[`JmxPrometheusExporterMetrics`], xref:type-StrimziMetricsReporter-{context}[`StrimziMetricsReporter`]
+|xref:type-JmxPrometheusExporterMetrics-{context}[`JmxPrometheusExporterMetrics`], xref:type-StrimziMetricsReporter-{context}[`StrimziMetricsReporter`], xref:type-StrimziMetricsReporterOtlp-{context}[`StrimziMetricsReporterOtlp`]
 |Metrics configuration.
 |livenessProbe
 |xref:type-StrimziProbe-{context}[`StrimziProbe`]
@@ -3754,7 +3756,7 @@ Used in: xref:type-KafkaMirrorMaker2-{context}[`KafkaMirrorMaker2`]
 |xref:type-TopologyLabelRack-{context}[`TopologyLabelRack`], xref:type-EnvironmentVariableRack-{context}[`EnvironmentVariableRack`]
 |Configuration of the node label which will be used as the `client.rack` consumer configuration.
 |metricsConfig
-|xref:type-JmxPrometheusExporterMetrics-{context}[`JmxPrometheusExporterMetrics`], xref:type-StrimziMetricsReporter-{context}[`StrimziMetricsReporter`]
+|xref:type-JmxPrometheusExporterMetrics-{context}[`JmxPrometheusExporterMetrics`], xref:type-StrimziMetricsReporter-{context}[`StrimziMetricsReporter`], xref:type-StrimziMetricsReporterOtlp-{context}[`StrimziMetricsReporterOtlp`]
 |Metrics configuration.
 |tracing
 |xref:type-OpenTelemetryTracing-{context}[`OpenTelemetryTracing`]

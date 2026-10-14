@@ -894,13 +894,11 @@ public class ReconcilerUtilsTest {
     public void testReconcileOtlpTlsNotConfigured() {
         SecretOperator mockSecretOps = mock(SecretOperator.class);
         StrimziMetricsReporterModel metrics = new StrimziMetricsReporterModel(new KafkaConnectSpecBuilder()
-                .withNewStrimziMetricsReporterConfig()
+                .withNewStrimziMetricsReporterOtlpConfig()
                     .withNewValues()
-                        .withNewOtlp()
-                            .withEndpoint("http://my-collector:4317")
-                        .endOtlp()
+                        .withEndpoint("http://my-collector:4317")
                     .endValues()
-                .endStrimziMetricsReporterConfig()
+                .endStrimziMetricsReporterOtlpConfig()
                 .build());
 
         String hash = ReconcilerUtils.reconcileOtlpTls(Reconciliation.DUMMY_RECONCILIATION, mockSecretOps, mock(AbstractModel.class), metrics).toCompletableFuture().join();
@@ -932,23 +930,21 @@ public class ReconcilerUtilsTest {
                 .build());
 
         StrimziMetricsReporterModel metrics = new StrimziMetricsReporterModel(new KafkaConnectSpecBuilder()
-                .withNewStrimziMetricsReporterConfig()
+                .withNewStrimziMetricsReporterOtlpConfig()
                     .withNewValues()
-                        .withNewOtlp()
-                            .withEndpoint("https://my-collector:4317")
-                            .withNewTls()
-                                .withTrustedCertificates(new CertSecretSourceBuilder().withSecretName("collector-ca").withCertificate("ca.crt").build())
-                            .endTls()
-                            .withNewOtlpAuthenticationTls()
-                                .withNewCertificateAndKey()
-                                    .withSecretName("my-client")
-                                    .withCertificate("tls.crt")
-                                    .withKey("tls.key")
-                                .endCertificateAndKey()
-                            .endOtlpAuthenticationTls()
-                        .endOtlp()
+                        .withEndpoint("https://my-collector:4317")
+                        .withNewTls()
+                            .withTrustedCertificates(new CertSecretSourceBuilder().withSecretName("collector-ca").withCertificate("ca.crt").build())
+                        .endTls()
+                        .withNewOtlpAuthenticationTls()
+                            .withNewCertificateAndKey()
+                                .withSecretName("my-client")
+                                .withCertificate("tls.crt")
+                                .withKey("tls.key")
+                            .endCertificateAndKey()
+                        .endOtlpAuthenticationTls()
                     .endValues()
-                .endStrimziMetricsReporterConfig()
+                .endStrimziMetricsReporterOtlpConfig()
                 .build());
 
         String hash1 = ReconcilerUtils.reconcileOtlpTls(new Reconciliation("test", "KafkaConnect", NAMESPACE, "my-connect"), mockSecretOps, model, metrics).toCompletableFuture().join();

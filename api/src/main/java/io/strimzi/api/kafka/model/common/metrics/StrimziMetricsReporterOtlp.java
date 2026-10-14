@@ -6,117 +6,42 @@ package io.strimzi.api.kafka.model.common.metrics;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
-import io.strimzi.api.kafka.model.common.ClientTls;
 import io.strimzi.api.kafka.model.common.Constants;
-import io.strimzi.api.kafka.model.common.UnknownPropertyPreserving;
 import io.strimzi.crdgenerator.annotations.Description;
-import io.strimzi.crdgenerator.annotations.Minimum;
 import io.sundr.builder.annotations.Buildable;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
 /**
- * Configuration for pushing the metrics collected by the Strimzi Metrics Reporter to an OTLP endpoint.
+ * Strimzi Metrics Reporter pushing the metrics to an OTLP endpoint.
  */
 @Buildable(
         editableEnabled = false,
         builderPackage = Constants.FABRIC8_KUBERNETES_API
 )
+@JsonPropertyOrder({"type", "values"})
 @JsonInclude(JsonInclude.Include.NON_NULL)
-@JsonPropertyOrder({"endpoint", "protocol", "intervalSeconds", "resourceAttributes", "tls", "authentication"})
-@EqualsAndHashCode
-@ToString
-public class StrimziMetricsReporterOtlp implements UnknownPropertyPreserving {
-    private String endpoint;
-    private OtlpProtocol protocol;
-    private Integer intervalSeconds;
-    private List<OtlpResourceAttribute> resourceAttributes;
-    private ClientTls tls;
-    private OtlpAuthentication authentication;
-    private Map<String, Object> additionalProperties;
+@EqualsAndHashCode(callSuper = true)
+@ToString(callSuper = true)
+public class StrimziMetricsReporterOtlp extends MetricsConfig {
+    public static final String TYPE_STRIMZI_METRICS_REPORTER_OTLP = "strimziMetricsReporterOtlp";
 
-    @Description("The OTLP endpoint the metrics are pushed to, in the `http://<HOST>:<PORT>` or `https://<HOST>:<PORT>` format, for example `http://my-collector:4317`. " +
-            "With the `http/protobuf` protocol, the `/v1/metrics` path is appended. " +
-            "When not set, the standard OpenTelemetry configuration applies, for example the `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable set in the container template.")
-    @JsonInclude(value = JsonInclude.Include.NON_NULL)
-    public String getEndpoint() {
-        return endpoint;
-    }
+    private StrimziMetricsReporterOtlpValues values;
 
-    public void setEndpoint(String endpoint) {
-        this.endpoint = endpoint;
-    }
-
-    @Description("The OTLP transport protocol, either `grpc` or `http/protobuf`. " +
-            "When not set, the standard OpenTelemetry configuration applies, which defaults to `grpc`.")
-    @JsonInclude(value = JsonInclude.Include.NON_NULL)
-    public OtlpProtocol getProtocol() {
-        return protocol;
-    }
-
-    public void setProtocol(OtlpProtocol protocol) {
-        this.protocol = protocol;
-    }
-
-    @Description("The interval in seconds between two pushes. " +
-            "When not set, the standard OpenTelemetry configuration applies, which defaults to 60 seconds.")
-    @Minimum(1)
-    @JsonInclude(value = JsonInclude.Include.NON_NULL)
-    public Integer getIntervalSeconds() {
-        return intervalSeconds;
-    }
-
-    public void setIntervalSeconds(Integer intervalSeconds) {
-        this.intervalSeconds = intervalSeconds;
-    }
-
-    @Description("Resource attributes added to the pushed metrics, for example to identify the pod they come from. " +
-            "Each attribute has a `name`, and either a static `value` or a `valueFrom` taking the value from a field of the pod. " +
-            "No resource attributes are added by default.")
-    @JsonInclude(value = JsonInclude.Include.NON_EMPTY)
-    public List<OtlpResourceAttribute> getResourceAttributes() {
-        return resourceAttributes;
-    }
-
-    public void setResourceAttributes(List<OtlpResourceAttribute> resourceAttributes) {
-        this.resourceAttributes = resourceAttributes;
-    }
-
-    @Description("TLS configuration for connecting to an `https://` OTLP endpoint. " +
-            "When `trustedCertificates` is not set, the server certificate is verified against the default JVM trust store.")
-    @JsonInclude(value = JsonInclude.Include.NON_NULL)
-    public ClientTls getTls() {
-        return tls;
-    }
-
-    public void setTls(ClientTls tls) {
-        this.tls = tls;
-    }
-
-    @Description("Authentication configuration for connecting to the OTLP endpoint.")
-    @JsonInclude(value = JsonInclude.Include.NON_NULL)
-    public OtlpAuthentication getAuthentication() {
-        return authentication;
-    }
-
-    public void setAuthentication(OtlpAuthentication authentication) {
-        this.authentication = authentication;
-    }
-
+    @Description("Must be `" + TYPE_STRIMZI_METRICS_REPORTER_OTLP + "`")
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     @Override
-    public Map<String, Object> getAdditionalProperties() {
-        return this.additionalProperties != null ? this.additionalProperties : Map.of();
+    public String getType() {
+        return TYPE_STRIMZI_METRICS_REPORTER_OTLP;
     }
 
-    @Override
-    public void setAdditionalProperty(String name, Object value) {
-        if (this.additionalProperties == null) {
-            this.additionalProperties = new HashMap<>(2);
-        }
-        this.additionalProperties.put(name, value);
+    // Same description as for the strimziMetricsReporter type, because the CRD merges the values of both types
+    @Description("Configuration values for the Strimzi Metrics Reporter.")
+    public StrimziMetricsReporterOtlpValues getValues() {
+        return values;
+    }
+
+    public void setValues(StrimziMetricsReporterOtlpValues values) {
+        this.values = values;
     }
 }

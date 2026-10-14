@@ -50,6 +50,7 @@ import io.strimzi.api.kafka.model.common.Rack;
 import io.strimzi.api.kafka.model.common.TopologyLabelRack;
 import io.strimzi.api.kafka.model.common.metrics.JmxPrometheusExporterMetrics;
 import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporter;
+import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporterOtlp;
 import io.strimzi.api.kafka.model.common.template.ContainerTemplate;
 import io.strimzi.api.kafka.model.common.template.ExternalTrafficPolicy;
 import io.strimzi.api.kafka.model.common.template.InternalServiceTemplate;
@@ -327,7 +328,8 @@ public class KafkaCluster extends AbstractModel implements SupportsMetrics, Supp
 
         if (kafkaClusterSpec.getMetricsConfig() instanceof JmxPrometheusExporterMetrics) {
             result.metrics = new JmxPrometheusExporterModel(kafkaClusterSpec);
-        } else if (kafkaClusterSpec.getMetricsConfig() instanceof StrimziMetricsReporter) {
+        } else if (kafkaClusterSpec.getMetricsConfig() instanceof StrimziMetricsReporter
+                || kafkaClusterSpec.getMetricsConfig() instanceof StrimziMetricsReporterOtlp) {
             result.metrics = new StrimziMetricsReporterModel(kafkaClusterSpec);
         }
 

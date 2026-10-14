@@ -984,6 +984,26 @@ public class CruiseControlTest {
     }
 
     @Test
+    public void testStrimziReporterOtlpMetricsConfig() {
+        Kafka kafka = new KafkaBuilder(KAFKA)
+            .editSpec()
+                .withNewCruiseControl()
+                    .withNewStrimziMetricsReporterOtlpConfig()
+                        .withNewValues()
+                            .withEndpoint("http://my-collector:4317")
+                        .endValues()
+                    .endStrimziMetricsReporterOtlpConfig()
+                .endCruiseControl()
+            .endSpec()
+            .build();
+
+        InvalidResourceException ex = assertThrows(InvalidResourceException.class,
+            () -> createCruiseControl(kafka, NODES, STORAGE, Map.of()));
+
+        assertThat(ex.getMessage(), is("The Strimzi Metrics Reporter is not supported with this component"));
+    }
+
+    @Test
     public void testDefaultTopicNames() {
         CruiseControl cc = createCruiseControl(KAFKA, NODES, STORAGE, Map.of());
 

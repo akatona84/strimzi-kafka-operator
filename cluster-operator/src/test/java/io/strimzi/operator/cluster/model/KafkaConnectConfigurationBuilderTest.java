@@ -22,6 +22,7 @@ import io.strimzi.api.kafka.model.common.authentication.KafkaClientAuthenticatio
 import io.strimzi.api.kafka.model.common.metrics.OtlpProtocol;
 import io.strimzi.api.kafka.model.common.metrics.OtlpResourceAttributeBuilder;
 import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporterBuilder;
+import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporterOtlpBuilder;
 import io.strimzi.api.kafka.model.connect.KafkaConnectSpecBuilder;
 import io.strimzi.operator.cluster.model.metrics.MetricsModel;
 import io.strimzi.operator.cluster.model.metrics.StrimziMetricsReporterConfig;
@@ -683,20 +684,15 @@ class KafkaConnectConfigurationBuilderTest {
     public void testStrimziMetricsReporterWithOtlp() {
         StrimziMetricsReporterModel model = new StrimziMetricsReporterModel(
                 new KafkaConnectSpecBuilder()
-                .withMetricsConfig(new StrimziMetricsReporterBuilder()
+                .withMetricsConfig(new StrimziMetricsReporterOtlpBuilder()
                     .withNewValues()
                         .withAllowList("kafka_connect_connector_metrics.*")
-                        .withNewPrometheusEndpoint()
-                            .withEnabled(false)
-                        .endPrometheusEndpoint()
-                        .withNewOtlp()
-                            .withEndpoint("http://my-collector:4318")
-                            .withProtocol(OtlpProtocol.HTTP_PROTOBUF)
-                            .withResourceAttributes(new OtlpResourceAttributeBuilder().withName("deployment.environment.name").withValue("production").build())
-                            .withNewTls()
-                                .withTrustedCertificates(new CertSecretSourceBuilder().withSecretName("collector-ca").withCertificate("ca.crt").build())
-                            .endTls()
-                        .endOtlp()
+                        .withEndpoint("http://my-collector:4318")
+                        .withProtocol(OtlpProtocol.HTTP_PROTOBUF)
+                        .withResourceAttributes(new OtlpResourceAttributeBuilder().withName("deployment.environment.name").withValue("production").build())
+                        .withNewTls()
+                            .withTrustedCertificates(new CertSecretSourceBuilder().withSecretName("collector-ca").withCertificate("ca.crt").build())
+                        .endTls()
                     .endValues()
                     .build())
                 .build());

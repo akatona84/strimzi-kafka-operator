@@ -629,9 +629,7 @@ Changes to this field will not trigger rolling update, the configuration is dyna
 
 NOTE: Using `strimziMetricsReporter` is only supported in the Kafka brokers and controllers at the moment.
 
-The Strimzi Metrics Reporter can also push the metrics to an OpenTelemetry Protocol (OTLP) endpoint, such as an OpenTelemetry Collector.
-To enable it, configure the `otlp` property.
-To only push the metrics, disable the Prometheus endpoint by setting `prometheusEndpoint.enabled` to `false`.
+To push the metrics to an OpenTelemetry Protocol (OTLP) endpoint instead, such as an OpenTelemetry Collector, set the type to `strimziMetricsReporterOtlp`.
 For more information, see xref:proc-metrics-reporter-otlp-{context}[Pushing metrics to an OTLP endpoint with Strimzi Metrics Reporter].
 
 .Example metrics configuration for Kafka

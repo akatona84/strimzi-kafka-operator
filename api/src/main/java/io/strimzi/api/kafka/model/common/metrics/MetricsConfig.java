@@ -24,7 +24,8 @@ import java.util.Map;
         property = "type")
 @JsonSubTypes({
     @JsonSubTypes.Type(name = JmxPrometheusExporterMetrics.TYPE_JMX_EXPORTER, value = JmxPrometheusExporterMetrics.class),
-    @JsonSubTypes.Type(name = StrimziMetricsReporter.TYPE_STRIMZI_METRICS_REPORTER, value = StrimziMetricsReporter.class)
+    @JsonSubTypes.Type(name = StrimziMetricsReporter.TYPE_STRIMZI_METRICS_REPORTER, value = StrimziMetricsReporter.class),
+    @JsonSubTypes.Type(name = StrimziMetricsReporterOtlp.TYPE_STRIMZI_METRICS_REPORTER_OTLP, value = StrimziMetricsReporterOtlp.class)
 })
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @EqualsAndHashCode
@@ -39,9 +40,10 @@ public abstract class MetricsConfig implements UnknownPropertyPreserving {
     private Map<String, Object> additionalProperties;
 
     @Description("Metrics type. " +
-            "The supported types are `jmxPrometheusExporter` and `strimziMetricsReporter`. " +
+            "The supported types are `jmxPrometheusExporter`, `strimziMetricsReporter` and `strimziMetricsReporterOtlp`. " +
             "Type `jmxPrometheusExporter` uses the Prometheus JMX Exporter to expose Kafka JMX metrics in Prometheus format through an HTTP endpoint. " +
-            "Type `strimziMetricsReporter` uses the Strimzi Metrics Reporter to directly expose Kafka metrics in Prometheus format through an HTTP endpoint.")
+            "Type `strimziMetricsReporter` uses the Strimzi Metrics Reporter to directly expose Kafka metrics in Prometheus format through an HTTP endpoint. " +
+            "Type `strimziMetricsReporterOtlp` uses the Strimzi Metrics Reporter to push Kafka metrics to an OTLP endpoint, such as an OpenTelemetry Collector.")
     public abstract String getType();
 
     @Override

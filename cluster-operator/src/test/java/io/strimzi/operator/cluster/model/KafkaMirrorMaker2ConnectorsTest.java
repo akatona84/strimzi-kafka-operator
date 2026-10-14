@@ -6,6 +6,7 @@ package io.strimzi.operator.cluster.model;
 
 import io.strimzi.api.kafka.model.common.CertSecretSourceBuilder;
 import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporterBuilder;
+import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporterOtlpBuilder;
 import io.strimzi.api.kafka.model.connector.KafkaConnector;
 import io.strimzi.api.kafka.model.mirrormaker2.KafkaMirrorMaker2;
 import io.strimzi.api.kafka.model.mirrormaker2.KafkaMirrorMaker2Builder;
@@ -643,6 +644,34 @@ public class KafkaMirrorMaker2ConnectorsTest {
         expected.put("metric.reporters", StrimziMetricsReporterConfig.CLIENT_CLASS);
         expected.put(StrimziMetricsReporterConfig.LISTENER_ENABLE, "false");
         assertThat(new TreeMap<>(config), is(expected));
+    }
+
+    @Test
+    public void testStrimziMetricsReporterOtlp() {
+        // The connector clients report into the registry of the worker, which pushes all the metrics
+        KafkaMirrorMaker2 kmm2 = new KafkaMirrorMaker2Builder(KMM2)
+                .editSpec()
+                    .withMirrors(new KafkaMirrorMaker2MirrorSpecBuilder()
+                            .withNewSource()
+                                .withAlias("source")
+                                .withBootstrapServers("source:9092")
+                            .endSource()
+                            .withNewSourceConnector()
+                            .endSourceConnector()
+                            .build())
+                    .withMetricsConfig(new StrimziMetricsReporterOtlpBuilder()
+                            .withNewValues()
+                                .withEndpoint("http://my-collector:4317")
+                            .endValues()
+                            .build())
+                .endSpec()
+                .build();
+
+        KafkaMirrorMaker2Connectors connectors = KafkaMirrorMaker2Connectors.fromCrd(Reconciliation.DUMMY_RECONCILIATION, kmm2);
+        Map<String, Object> config = connectors.prepareMirrorMaker2ConnectorConfig(kmm2.getSpec().getMirrors().get(0), kmm2.getSpec().getMirrors().get(0).getSourceConnector());
+
+        assertThat(config.get("metric.reporters"), is(StrimziMetricsReporterConfig.CLIENT_CLASS));
+        assertThat(config.get(StrimziMetricsReporterConfig.LISTENER_ENABLE), is("false"));
     }
 
     @Test

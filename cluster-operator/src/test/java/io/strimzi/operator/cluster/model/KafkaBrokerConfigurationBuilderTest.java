@@ -10,6 +10,7 @@ import io.strimzi.api.kafka.model.common.EnvironmentVariableRackBuilder;
 import io.strimzi.api.kafka.model.common.TopologyLabelRackBuilder;
 import io.strimzi.api.kafka.model.common.metrics.OtlpResourceAttributeBuilder;
 import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporterBuilder;
+import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporterOtlpBuilder;
 import io.strimzi.api.kafka.model.kafka.EphemeralStorageBuilder;
 import io.strimzi.api.kafka.model.kafka.JbodStorageBuilder;
 import io.strimzi.api.kafka.model.kafka.KafkaAuthorization;
@@ -329,31 +330,26 @@ public class KafkaBrokerConfigurationBuilderTest {
     public void testStrimziMetricsReporterWithOtlp()  {
         StrimziMetricsReporterModel model = new StrimziMetricsReporterModel(
                 new KafkaClusterSpecBuilder()
-                        .withMetricsConfig(new StrimziMetricsReporterBuilder()
+                        .withMetricsConfig(new StrimziMetricsReporterOtlpBuilder()
                             .withNewValues()
                                 .withAllowList(List.of("kafka_log.*", "kafka_network.*"))
-                                .withNewPrometheusEndpoint()
-                                    .withEnabled(false)
-                                .endPrometheusEndpoint()
-                                .withNewOtlp()
-                                    .withEndpoint("https://my-collector:4317")
-                                    .withResourceAttributes(new OtlpResourceAttributeBuilder()
-                                            .withName("k8s.pod.name")
-                                            .withNewValueFrom()
-                                                .withFieldRef(new ObjectFieldSelectorBuilder().withFieldPath("metadata.name").build())
-                                            .endValueFrom()
-                                            .build())
-                                    .withNewTls()
-                                        .withTrustedCertificates(new CertSecretSourceBuilder().withSecretName("collector-ca").withCertificate("ca.crt").build())
-                                    .endTls()
-                                    .withNewOtlpAuthenticationTls()
-                                        .withNewCertificateAndKey()
-                                            .withSecretName("my-client")
-                                            .withCertificate("tls.crt")
-                                            .withKey("tls.key")
-                                        .endCertificateAndKey()
-                                    .endOtlpAuthenticationTls()
-                                .endOtlp()
+                                .withEndpoint("https://my-collector:4317")
+                                .withResourceAttributes(new OtlpResourceAttributeBuilder()
+                                        .withName("k8s.pod.name")
+                                        .withNewValueFrom()
+                                            .withFieldRef(new ObjectFieldSelectorBuilder().withFieldPath("metadata.name").build())
+                                        .endValueFrom()
+                                        .build())
+                                .withNewTls()
+                                    .withTrustedCertificates(new CertSecretSourceBuilder().withSecretName("collector-ca").withCertificate("ca.crt").build())
+                                .endTls()
+                                .withNewOtlpAuthenticationTls()
+                                    .withNewCertificateAndKey()
+                                        .withSecretName("my-client")
+                                        .withCertificate("tls.crt")
+                                        .withKey("tls.key")
+                                    .endCertificateAndKey()
+                                .endOtlpAuthenticationTls()
                             .endValues()
                             .build())
                         .build());

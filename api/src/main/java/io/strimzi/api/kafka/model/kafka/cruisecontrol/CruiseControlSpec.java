@@ -108,7 +108,7 @@ public class CruiseControlSpec implements HasConfigurableMetrics, HasConfigurabl
         this.apiUsers = apiUsers;
     }
 
-    @Description("Metrics configuration. Only `jmxPrometheusExporter` can be configured, as this component does not support `strimziMetricsReporter`.")
+    @Description("Metrics configuration. Only `jmxPrometheusExporter` can be configured, as this component does not support `strimziMetricsReporter` and `strimziMetricsReporterOtlp`.")
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     @CelValidation(rules = {
         @CelValidation.CelValidationRule(
@@ -117,6 +117,10 @@ public class CruiseControlSpec implements HasConfigurableMetrics, HasConfigurabl
             ),
         @CelValidation.CelValidationRule(
                 rule = "self.type != 'strimziMetricsReporter'",
+                message = "value type not supported"
+            ),
+        @CelValidation.CelValidationRule(
+                rule = "self.type != 'strimziMetricsReporterOtlp'",
                 message = "value type not supported"
             )
         })

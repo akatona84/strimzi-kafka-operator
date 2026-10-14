@@ -1301,36 +1301,35 @@ public class KafkaBridgeClusterTest {
     public void testStrimziMetricsReporterWithOtlpConfig() {
         KafkaBridge resource = new KafkaBridgeBuilder(RESOURCE)
                 .editSpec()
-                    .withNewStrimziMetricsReporterConfig()
+                    .withNewStrimziMetricsReporterOtlpConfig()
                         .withNewValues()
-                            .withNewOtlp()
-                                .withEndpoint("https://my-collector:4317")
-                                .withResourceAttributes(new OtlpResourceAttributeBuilder()
-                                    .withName("k8s.pod.name")
-                                    .withNewValueFrom()
-                                        .withFieldRef(new ObjectFieldSelectorBuilder().withFieldPath("metadata.name").build())
-                                    .endValueFrom()
-                                    .build())
-                                .withNewTls()
-                                .withTrustedCertificates(new CertSecretSourceBuilder().withSecretName("collector-ca").withCertificate("ca.crt").build())
-                                .endTls()
-                                .withNewOtlpAuthenticationTls()
-                                .withNewCertificateAndKey()
-                                    .withSecretName("my-otlp-client")
-                                    .withCertificate("tls.crt")
-                                    .withKey("tls.key")
-                                .endCertificateAndKey()
-                                .endOtlpAuthenticationTls()
-                            .endOtlp()
+                            .withEndpoint("https://my-collector:4317")
+                            .withResourceAttributes(new OtlpResourceAttributeBuilder()
+                                .withName("k8s.pod.name")
+                                .withNewValueFrom()
+                                    .withFieldRef(new ObjectFieldSelectorBuilder().withFieldPath("metadata.name").build())
+                                .endValueFrom()
+                                .build())
+                            .withNewTls()
+                            .withTrustedCertificates(new CertSecretSourceBuilder().withSecretName("collector-ca").withCertificate("ca.crt").build())
+                            .endTls()
+                            .withNewOtlpAuthenticationTls()
+                            .withNewCertificateAndKey()
+                                .withSecretName("my-otlp-client")
+                                .withCertificate("tls.crt")
+                                .withKey("tls.key")
+                            .endCertificateAndKey()
+                            .endOtlpAuthenticationTls()
                         .endValues()
-                    .endStrimziMetricsReporterConfig()
+                    .endStrimziMetricsReporterOtlpConfig()
                 .endSpec()
                 .build();
 
         KafkaBridgeCluster kbc = KafkaBridgeCluster.fromCrd(Reconciliation.DUMMY_RECONCILIATION, resource, SHARED_ENV_PROVIDER);
 
         String config = kbc.generateBridgeConfigMap(METRICS_AND_LOGGING).getData().get(BRIDGE_CONFIGURATION_FILENAME);
-        assertThat(config, containsString("bridge.metrics.otlp.enable=true"));
+        assertThat(config, containsString("bridge.metrics=strimziMetricsReporterOtlp"));
+        assertThat(config, not(containsString("bridge.metrics.otlp.enable")));
         assertThat(config, containsString("bridge.metrics.otlp.endpoint=https://my-collector:4317"));
         assertThat(config, containsString("bridge.metrics.otlp.ssl.truststore.certificates=${strimzisecrets:"));
         assertThat(kbc.secretsToAllowAccessTo(), hasItems(kbc.getComponentName() + "-otlp-trusted-certs", "my-otlp-client"));

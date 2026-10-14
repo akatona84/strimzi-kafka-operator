@@ -24,6 +24,7 @@ import io.fabric8.kubernetes.api.model.policy.v1.PodDisruptionBudget;
 import io.strimzi.api.kafka.model.common.JvmOptions;
 import io.strimzi.api.kafka.model.common.metrics.JmxPrometheusExporterMetrics;
 import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporter;
+import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporterOtlp;
 import io.strimzi.api.kafka.model.common.template.DeploymentTemplate;
 import io.strimzi.api.kafka.model.common.template.InternalServiceTemplate;
 import io.strimzi.api.kafka.model.common.template.PodDisruptionBudgetTemplate;
@@ -230,7 +231,8 @@ public class CruiseControl extends AbstractModel implements SupportsMetrics, Sup
             */
             if (ccSpec.getMetricsConfig() instanceof JmxPrometheusExporterMetrics) {
                 result.metrics = new JmxPrometheusExporterModel(ccSpec);
-            } else if (ccSpec.getMetricsConfig() instanceof StrimziMetricsReporter) {
+            } else if (ccSpec.getMetricsConfig() instanceof StrimziMetricsReporter
+                    || ccSpec.getMetricsConfig() instanceof StrimziMetricsReporterOtlp) {
                 LOGGER.errorCr(reconciliation, "The Strimzi Metrics Reporter is not supported with this component");
                 throw new InvalidResourceException("The Strimzi Metrics Reporter is not supported with this component");
             }

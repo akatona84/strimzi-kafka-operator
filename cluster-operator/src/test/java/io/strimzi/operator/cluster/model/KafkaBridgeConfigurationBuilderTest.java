@@ -31,6 +31,7 @@ import io.strimzi.api.kafka.model.common.authentication.KafkaClientAuthenticatio
 import io.strimzi.api.kafka.model.common.metrics.JmxPrometheusExporterMetrics;
 import io.strimzi.api.kafka.model.common.metrics.OtlpResourceAttributeBuilder;
 import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporter;
+import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporterOtlp;
 import io.strimzi.api.kafka.model.common.tracing.OpenTelemetryTracing;
 import io.strimzi.operator.cluster.model.metrics.JmxPrometheusExporterModel;
 import io.strimzi.operator.cluster.model.metrics.StrimziMetricsReporterConfig;
@@ -725,31 +726,26 @@ public class KafkaBridgeConfigurationBuilderTest {
     public void testWithStrimziMetricsReporterWithOtlp() {
         StrimziMetricsReporterModel model = new StrimziMetricsReporterModel(
                 new KafkaBridgeSpecBuilder()
-                        .withNewStrimziMetricsReporterConfig()
+                        .withNewStrimziMetricsReporterOtlpConfig()
                                 .withNewValues()
                                     .withAllowList("kafka_producer_producer_metrics.*")
-                                    .withNewPrometheusEndpoint()
-                                        .withEnabled(false)
-                                    .endPrometheusEndpoint()
-                                    .withNewOtlp()
-                                        .withEndpoint("https://my-collector:4317")
-                                        .withIntervalSeconds(30)
-                                        .withResourceAttributes(new OtlpResourceAttributeBuilder()
-                                                .withName("k8s.pod.name")
-                                                .withNewValueFrom()
-                                                    .withFieldRef(new ObjectFieldSelectorBuilder().withFieldPath("metadata.name").build())
-                                                .endValueFrom()
-                                                .build())
-                                        .withNewOtlpAuthenticationTls()
-                                            .withNewCertificateAndKey()
-                                                .withSecretName("my-client")
-                                                .withCertificate("tls.crt")
-                                                .withKey("tls.key")
-                                            .endCertificateAndKey()
-                                        .endOtlpAuthenticationTls()
-                                    .endOtlp()
+                                    .withEndpoint("https://my-collector:4317")
+                                    .withIntervalSeconds(30)
+                                    .withResourceAttributes(new OtlpResourceAttributeBuilder()
+                                            .withName("k8s.pod.name")
+                                            .withNewValueFrom()
+                                                .withFieldRef(new ObjectFieldSelectorBuilder().withFieldPath("metadata.name").build())
+                                            .endValueFrom()
+                                            .build())
+                                    .withNewOtlpAuthenticationTls()
+                                        .withNewCertificateAndKey()
+                                            .withSecretName("my-client")
+                                            .withCertificate("tls.crt")
+                                            .withKey("tls.key")
+                                        .endCertificateAndKey()
+                                    .endOtlpAuthenticationTls()
                                 .endValues()
-                        .endStrimziMetricsReporterConfig()
+                        .endStrimziMetricsReporterOtlpConfig()
                         .build());
 
         String configuration = new KafkaBridgeConfigurationBuilder(Reconciliation.DUMMY_RECONCILIATION, BRIDGE_CLUSTER, BRIDGE_BOOTSTRAP_SERVERS)
@@ -760,9 +756,7 @@ public class KafkaBridgeConfigurationBuilderTest {
         assertThat(configuration, isEquivalent(
                 "bridge.id=my-bridge",
                 "kafka.bootstrap.servers=my-cluster-kafka-bootstrap:9092",
-                "bridge.metrics=" + StrimziMetricsReporter.TYPE_STRIMZI_METRICS_REPORTER,
-                "bridge.metrics.endpoint.enable=false",
-                "bridge.metrics.otlp.enable=true",
+                "bridge.metrics=" + StrimziMetricsReporterOtlp.TYPE_STRIMZI_METRICS_REPORTER_OTLP,
                 "bridge.metrics.otlp.endpoint=https://my-collector:4317",
                 "bridge.metrics.otlp.interval.seconds=30",
                 "bridge.metrics.otlp.resource.attributes=k8s.pod.name=${strimzienv:STRIMZI_OTLP_RESOURCE_ATTRIBUTE_0}",

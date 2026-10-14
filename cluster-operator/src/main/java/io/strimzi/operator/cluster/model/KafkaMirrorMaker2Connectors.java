@@ -11,6 +11,7 @@ import io.strimzi.api.kafka.model.common.authentication.KafkaClientAuthenticatio
 import io.strimzi.api.kafka.model.common.authentication.KafkaClientAuthenticationScramSha256;
 import io.strimzi.api.kafka.model.common.authentication.KafkaClientAuthenticationTls;
 import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporter;
+import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporterOtlp;
 import io.strimzi.api.kafka.model.common.tracing.OpenTelemetryTracing;
 import io.strimzi.api.kafka.model.common.tracing.Tracing;
 import io.strimzi.api.kafka.model.connect.KafkaConnectResources;
@@ -71,7 +72,8 @@ public class KafkaMirrorMaker2Connectors {
         this.mirrors = kafkaMirrorMaker2.getSpec().getMirrors();
         this.tracing = kafkaMirrorMaker2.getSpec().getTracing();
         this.rackAwarenessEnabled = kafkaMirrorMaker2.getSpec().getRack() != null;
-        this.strimziMetricsReporterEnabled = kafkaMirrorMaker2.getSpec().getMetricsConfig() instanceof StrimziMetricsReporter;
+        this.strimziMetricsReporterEnabled = kafkaMirrorMaker2.getSpec().getMetricsConfig() instanceof StrimziMetricsReporter
+                || kafkaMirrorMaker2.getSpec().getMetricsConfig() instanceof StrimziMetricsReporterOtlp;
     }
 
     /**

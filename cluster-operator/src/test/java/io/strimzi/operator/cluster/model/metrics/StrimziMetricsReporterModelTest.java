@@ -12,6 +12,7 @@ import io.strimzi.api.kafka.model.common.metrics.OtlpResourceAttribute;
 import io.strimzi.api.kafka.model.common.metrics.OtlpResourceAttributeBuilder;
 import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporter;
 import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporterBuilder;
+import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporterOtlpBuilder;
 import io.strimzi.api.kafka.model.connect.KafkaConnectSpecBuilder;
 import io.strimzi.api.kafka.model.kafka.KafkaClusterSpecBuilder;
 import io.strimzi.operator.common.InvalidConfigurationException;
@@ -89,7 +90,7 @@ public class StrimziMetricsReporterModelTest {
     }
 
     @Test
-    public void testPrometheusEndpointEnabledByDefault() {
+    public void testPrometheusEndpoint() {
         StrimziMetricsReporterModel metrics = new StrimziMetricsReporterModel(new KafkaClusterSpecBuilder()
                 .withMetricsConfig(new StrimziMetricsReporterBuilder().build()).build());
 
@@ -104,22 +105,19 @@ public class StrimziMetricsReporterModelTest {
     @Test
     public void testOtlpConfiguration() {
         StrimziMetricsReporterModel metrics = new StrimziMetricsReporterModel(new KafkaClusterSpecBuilder()
-                .withMetricsConfig(new StrimziMetricsReporterBuilder()
+                .withMetricsConfig(new StrimziMetricsReporterOtlpBuilder()
                         .withNewValues()
-                            .withNewPrometheusEndpoint()
-                                .withEnabled(false)
-                            .endPrometheusEndpoint()
-                            .withNewOtlp()
-                                .withEndpoint("http://my-collector:4317")
-                                .withProtocol(OtlpProtocol.GRPC)
-                                .withIntervalSeconds(30)
-                            .endOtlp()
+                            .withAllowList("kafka_log.*")
+                            .withEndpoint("http://my-collector:4317")
+                            .withProtocol(OtlpProtocol.GRPC)
+                            .withIntervalSeconds(30)
                         .endValues()
                         .build())
                 .build());
 
         assertThat(metrics.isPrometheusEndpointEnabled(), is(false));
         assertThat(metrics.isOtlpEnabled(), is(true));
+        assertThat(metrics.getAllowListOrDefault(List.of(".*")), is("kafka_log.*"));
         // No resource attributes are set by default, so no environment variables are needed
         assertThat(metrics.envVars(), is(empty()));
         assertThat(metrics.otlpConfiguration("my-namespace", "my-cluster-kafka"), is(Map.of(
@@ -131,16 +129,14 @@ public class StrimziMetricsReporterModelTest {
 
     @Test
     public void testOtlpConfigurationLeavesUnsetValuesOut() {
+        // Without values, the default allow list and the standard OpenTelemetry configuration apply
         StrimziMetricsReporterModel metrics = new StrimziMetricsReporterModel(new KafkaClusterSpecBuilder()
-                .withMetricsConfig(new StrimziMetricsReporterBuilder()
-                        .withNewValues()
-                            .withNewOtlp()
-                            .endOtlp()
-                        .endValues()
-                        .build())
+                .withMetricsConfig(new StrimziMetricsReporterOtlpBuilder().build())
                 .build());
 
-        assertThat(metrics.isPrometheusEndpointEnabled(), is(true));
+        assertThat(metrics.isPrometheusEndpointEnabled(), is(false));
+        assertThat(metrics.isOtlpEnabled(), is(true));
+        assertThat(metrics.getAllowListOrDefault(List.of("kafka_server_raft.*")), is("kafka_server_raft.*"));
         assertThat(metrics.otlpConfiguration("my-namespace", "my-cluster-kafka").keySet(),
                 is(Set.of(StrimziMetricsReporterConfig.OTLP_ENABLE)));
     }
@@ -148,15 +144,13 @@ public class StrimziMetricsReporterModelTest {
     @Test
     public void testOtlpResourceAttributes() {
         StrimziMetricsReporterModel metrics = new StrimziMetricsReporterModel(new KafkaClusterSpecBuilder()
-                .withMetricsConfig(new StrimziMetricsReporterBuilder()
+                .withMetricsConfig(new StrimziMetricsReporterOtlpBuilder()
                         .withNewValues()
-                            .withNewOtlp()
-                                .withResourceAttributes(
-                                        new OtlpResourceAttributeBuilder().withName("team").withValue("a,b=c d").build(),
-                                        fieldRefAttribute("k8s.pod.name", "metadata.name"),
-                                        fieldRefAttribute("k8s.node.name", "spec.nodeName"),
-                                        new OtlpResourceAttributeBuilder().withName("service.name").withValue("my-service").build())
-                            .endOtlp()
+                            .withResourceAttributes(
+                                    new OtlpResourceAttributeBuilder().withName("team").withValue("a,b=c d").build(),
+                                    fieldRefAttribute("k8s.pod.name", "metadata.name"),
+                                    fieldRefAttribute("k8s.node.name", "spec.nodeName"),
+                                    new OtlpResourceAttributeBuilder().withName("service.name").withValue("my-service").build())
                         .endValues()
                         .build())
                 .build());
@@ -178,21 +172,19 @@ public class StrimziMetricsReporterModelTest {
     @Test
     public void testOtlpTls() {
         StrimziMetricsReporterModel metrics = new StrimziMetricsReporterModel(new KafkaClusterSpecBuilder()
-                .withMetricsConfig(new StrimziMetricsReporterBuilder()
+                .withMetricsConfig(new StrimziMetricsReporterOtlpBuilder()
                         .withNewValues()
-                            .withNewOtlp()
-                                .withEndpoint("https://my-collector:4317")
-                                .withNewTls()
-                                    .withTrustedCertificates(new CertSecretSourceBuilder().withSecretName("collector-ca").withCertificate("ca.crt").build())
-                                .endTls()
-                                .withNewOtlpAuthenticationTls()
-                                    .withNewCertificateAndKey()
-                                        .withSecretName("my-client")
-                                        .withCertificate("tls.crt")
-                                        .withKey("tls.key")
-                                    .endCertificateAndKey()
-                                .endOtlpAuthenticationTls()
-                            .endOtlp()
+                            .withEndpoint("https://my-collector:4317")
+                            .withNewTls()
+                                .withTrustedCertificates(new CertSecretSourceBuilder().withSecretName("collector-ca").withCertificate("ca.crt").build())
+                            .endTls()
+                            .withNewOtlpAuthenticationTls()
+                                .withNewCertificateAndKey()
+                                    .withSecretName("my-client")
+                                    .withCertificate("tls.crt")
+                                    .withKey("tls.key")
+                                .endCertificateAndKey()
+                            .endOtlpAuthenticationTls()
                         .endValues()
                         .build())
                 .build());
@@ -213,13 +205,11 @@ public class StrimziMetricsReporterModelTest {
     @Test
     public void testOtlpTrustedCertificatesOnly() {
         StrimziMetricsReporterModel metrics = new StrimziMetricsReporterModel(new KafkaClusterSpecBuilder()
-                .withMetricsConfig(new StrimziMetricsReporterBuilder()
+                .withMetricsConfig(new StrimziMetricsReporterOtlpBuilder()
                         .withNewValues()
-                            .withNewOtlp()
-                                .withNewTls()
-                                    .withTrustedCertificates(new CertSecretSourceBuilder().withSecretName("collector-ca").withPattern("*.crt").build())
-                                .endTls()
-                            .endOtlp()
+                            .withNewTls()
+                                .withTrustedCertificates(new CertSecretSourceBuilder().withSecretName("collector-ca").withPattern("*.crt").build())
+                            .endTls()
                         .endValues()
                         .build())
                 .build());
@@ -242,53 +232,43 @@ public class StrimziMetricsReporterModelTest {
 
     @Test
     public void testOtlpValidation() {
-        assertDoesNotThrow(() -> StrimziMetricsReporterModel.validate(new StrimziMetricsReporterBuilder()
+        assertDoesNotThrow(() -> StrimziMetricsReporterModel.validate(new StrimziMetricsReporterOtlpBuilder()
                 .withNewValues()
-                    .withNewPrometheusEndpoint()
-                        .withEnabled(false)
-                    .endPrometheusEndpoint()
-                    .withNewOtlp()
-                        .withEndpoint("https://my-collector:4318")
-                        .withResourceAttributes(
-                                fieldRefAttribute("a", "metadata.name"),
-                                fieldRefAttribute("b", "metadata.labels['strimzi.io/cluster']"),
-                                fieldRefAttribute("c", "status.podIP"))
-                    .endOtlp()
+                    .withAllowList("kafka_log.*")
+                    .withEndpoint("https://my-collector:4318")
+                    .withResourceAttributes(
+                            fieldRefAttribute("a", "metadata.name"),
+                            fieldRefAttribute("b", "metadata.labels['strimzi.io/cluster']"),
+                            fieldRefAttribute("c", "status.podIP"))
                 .endValues()
                 .build())
         );
 
         InvalidResourceException ise0 = assertThrows(InvalidResourceException.class, () -> StrimziMetricsReporterModel.validate(
-                new StrimziMetricsReporterBuilder()
+                new StrimziMetricsReporterOtlpBuilder()
                         .withNewValues()
-                            .withNewPrometheusEndpoint()
-                                .withEnabled(false)
-                            .endPrometheusEndpoint()
+                            .withAllowList(List.of())
                         .endValues()
                         .build())
         );
-        assertThat(ise0.getMessage(), is("Metrics configuration is invalid: [otlp must be configured when the Prometheus endpoint is disabled]"));
+        assertThat(ise0.getMessage(), is("Metrics configuration is invalid: [Allowlist should contain at least one element]"));
 
         InvalidResourceException ise1 = assertThrows(InvalidResourceException.class, () -> StrimziMetricsReporterModel.validate(
-                new StrimziMetricsReporterBuilder()
+                new StrimziMetricsReporterOtlpBuilder()
                         .withNewValues()
-                            .withNewOtlp()
-                                .withEndpoint("my-collector:4317")
-                                .withIntervalSeconds(0)
-                            .endOtlp()
+                            .withEndpoint("my-collector:4317")
+                            .withIntervalSeconds(0)
                         .endValues()
                         .build())
         );
         assertThat(ise1.getMessage(), is("Metrics configuration is invalid: [OTLP endpoint must start with http:// or https://, OTLP interval must be at least 1 second]"));
 
         InvalidResourceException ise2 = assertThrows(InvalidResourceException.class, () -> StrimziMetricsReporterModel.validate(
-                new StrimziMetricsReporterBuilder()
+                new StrimziMetricsReporterOtlpBuilder()
                         .withNewValues()
-                            .withNewOtlp()
-                                .withResourceAttributes(
-                                        fieldRefAttribute("a", "spec.containers[0].image"),
-                                        new OtlpResourceAttributeBuilder().withName("b").build())
-                            .endOtlp()
+                            .withResourceAttributes(
+                                    fieldRefAttribute("a", "spec.containers[0].image"),
+                                    new OtlpResourceAttributeBuilder().withName("b").build())
                         .endValues()
                         .build())
         );
