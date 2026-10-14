@@ -116,6 +116,13 @@ public class KafkaBridgeAssemblyOperator extends AbstractAssemblyOperator<Kubern
                 podAnnotations.put(Annotations.ANNO_STRIMZI_AUTH_HASH, Integer.toString(authTlsHash));
                 return Future.succeededFuture();
             })
+            .compose(i -> VertxUtil.toFuture(ReconcilerUtils.reconcileOtlpTls(reconciliation, secretOperations, bridge, bridge.metrics())))
+            .compose(otlpTlsHash -> {
+                if (otlpTlsHash != null) {
+                    podAnnotations.put(Annotations.ANNO_STRIMZI_OTLP_TLS_HASH, otlpTlsHash);
+                }
+                return Future.succeededFuture();
+            })
             .compose(i -> VertxUtil.toFuture(MetricsAndLoggingUtils.metricsAndLogging(reconciliation, configMapOperations, bridge.logging(), bridge.metrics())))
             .compose(metricsAndLogging -> {
                 ConfigMap configMap = bridge.generateBridgeConfigMap(metricsAndLogging);

@@ -162,6 +162,7 @@ public class KafkaReconciler {
     private final Set<String> fsResizingRestartRequest = new HashSet<>();
 
     private final Map<Integer, String> brokerConfigurationHash = new HashMap<>();
+    private String otlpTlsHash;
     private final Map<Integer, String> kafkaServerCertificateHash = new HashMap<>();
     private final List<String> secretsToDelete = new ArrayList<>();
     /* test */ Identity coIdentity;
@@ -270,6 +271,7 @@ public class KafkaReconciler {
                 .compose(i -> listeners())
                 .compose(i -> certificateSecrets(clock))
                 .compose(i -> brokerConfigurationConfigMaps())
+                .compose(i -> otlpTls())
                 .compose(i -> jmxSecret())
                 .compose(i -> podDisruptionBudget())
                 .compose(i -> podSet())
@@ -893,6 +895,20 @@ public class KafkaReconciler {
     }
 
     /**
+     * Reconciles the internal Secret with the trusted certificates of the OTLP endpoint of the Strimzi Metrics
+     * Reporter, and stores the hash of the OTLP TLS certificates to roll the Pods when they change.
+     *
+     * @return  Future which completes when the OTLP TLS certificates are reconciled
+     */
+    protected Future<Void> otlpTls() {
+        return VertxUtil.toFuture(ReconcilerUtils.reconcileOtlpTls(reconciliation, secretOperator, kafka, kafka.metrics()))
+                .compose(hash -> {
+                    this.otlpTlsHash = hash;
+                    return Future.succeededFuture();
+                });
+    }
+
+    /**
      * Prepares annotations for Kafka pods within a StrimziPodSet which are known only in the KafkaAssemblyOperator level.
      * These are later passed to KafkaCluster where there are used when creating the Pod definitions.
      *
@@ -908,6 +924,10 @@ public class KafkaReconciler {
         podAnnotations.put(Annotations.ANNO_STRIMZI_IO_CONFIGURATION_HASH, brokerConfigurationHash.get(node.nodeId()));
         podAnnotations.put(ANNO_STRIMZI_IO_KAFKA_VERSION, kafka.getKafkaVersion().version());
         podAnnotations.put(ANNO_STRIMZI_SERVER_CERT_HASH, kafkaServerCertificateHash.get(node.nodeId())); // Annotation of broker certificate hash
+
+        if (otlpTlsHash != null) {
+            podAnnotations.put(Annotations.ANNO_STRIMZI_OTLP_TLS_HASH, otlpTlsHash);
+        }
 
         // Annotations with custom cert thumbprints to help with rolling updates when they change
         if (node.broker() && !listenerReconciliationResults.customListenerCertificateThumbprints.isEmpty()) {

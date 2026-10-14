@@ -21,6 +21,7 @@ import io.strimzi.api.kafka.model.kafka.KafkaResources;
 import io.strimzi.api.kafka.model.podset.StrimziPodSet;
 import io.strimzi.certs.CertAndKey;
 import io.strimzi.operator.cluster.auth.RequestedServiceAccountAuthIdentity;
+import io.strimzi.operator.cluster.model.AbstractModel;
 import io.strimzi.operator.cluster.model.InPlacePodResizingUtils;
 import io.strimzi.operator.cluster.model.NodeRef;
 import io.strimzi.operator.cluster.model.PodRevision;
@@ -32,6 +33,8 @@ import io.strimzi.operator.cluster.model.clustersecurity.kafka.MtlsAuthenticatio
 import io.strimzi.operator.cluster.model.clustersecurity.kafka.ServiceAccountAuthenticationConfiguration;
 import io.strimzi.operator.cluster.model.clustersecurity.kafka.TlsEncryptionConfiguration;
 import io.strimzi.operator.cluster.model.jmx.SupportsJmx;
+import io.strimzi.operator.cluster.model.metrics.MetricsModel;
+import io.strimzi.operator.cluster.model.metrics.StrimziMetricsReporterModel;
 import io.strimzi.operator.cluster.operator.resource.kubernetes.PodOperator;
 import io.strimzi.operator.common.Annotations;
 import io.strimzi.operator.common.InvalidConfigurationException;
@@ -506,6 +509,49 @@ public class ReconcilerUtils {
                 return tlsFuture;
             }
         }
+    }
+
+    /**
+     * Reconciles the internal Secret aggregating the trusted certificates of the OTLP endpoint the Strimzi Metrics
+     * Reporter pushes the metrics to, and computes a hash of the OTLP TLS certificates, including the client
+     * certificate and key used for mTLS. The certificates are only loaded when the Pods start, so the hash is used
+     * as a Pod annotation to roll the Pods when they change.
+     *
+     * @param reconciliation    Reconciliation marker
+     * @param secretOperations  Secrets operator
+     * @param model             Model of the component, used to generate the internal Secret
+     * @param metrics           Metrics model of the component
+     *
+     * @return  CompletionStage with the hash, or null when no OTLP TLS certificates are configured. In that case, no
+     *          Kubernetes API calls are made.
+     */
+    public static CompletionStage<String> reconcileOtlpTls(Reconciliation reconciliation, SecretOperator secretOperations, AbstractModel model, MetricsModel metrics) {
+        if (!(metrics instanceof StrimziMetricsReporterModel reporterModel) || !reporterModel.isOtlpTlsConfigured()) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        String namespace = reconciliation.namespace();
+        CompletionStage<String> trustedCertsFuture;
+        if (reporterModel.otlpTrustedCertificates().isEmpty()) {
+            trustedCertsFuture = CompletableFuture.completedFuture("");
+        } else {
+            trustedCertsFuture = trustedCertificates(reconciliation, secretOperations, reporterModel.otlpTrustedCertificates())
+                    .thenApply(certificates -> String.join("\n", certificates))
+                    .thenCompose(certificates -> secretOperations.reconcile(reconciliation, namespace,
+                                    StrimziMetricsReporterModel.otlpTrustedCertsSecretName(model.getComponentName()),
+                                    model.generateOtlpTrustedCertsSecret(certificates))
+                            .thenApply(i -> certificates));
+        }
+
+        CertAndKeySecretSource certificateAndKey = reporterModel.otlpCertificateAndKey();
+        return trustedCertsFuture.thenCompose(certificates -> {
+            if (certificateAndKey == null) {
+                return CompletableFuture.completedFuture(Util.hashStub(certificates));
+            } else {
+                return getCertificateAndKeyAsync(secretOperations, namespace, certificateAndKey)
+                        .thenApply(crtAndKey -> Util.hashStub(certificates + crtAndKey.certAsBase64String() + crtAndKey.keyAsBase64String()));
+            }
+        });
     }
 
     /**

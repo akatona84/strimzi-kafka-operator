@@ -18,6 +18,7 @@ import io.fabric8.kubernetes.api.model.IntOrString;
 import io.fabric8.kubernetes.api.model.LabelSelectorBuilder;
 import io.fabric8.kubernetes.api.model.LocalObjectReference;
 import io.fabric8.kubernetes.api.model.NodeSelectorTermBuilder;
+import io.fabric8.kubernetes.api.model.ObjectFieldSelectorBuilder;
 import io.fabric8.kubernetes.api.model.PodSecurityContextBuilder;
 import io.fabric8.kubernetes.api.model.PodSpec;
 import io.fabric8.kubernetes.api.model.Quantity;
@@ -48,6 +49,7 @@ import io.strimzi.api.kafka.model.common.JvmOptions;
 import io.strimzi.api.kafka.model.common.JvmOptionsBuilder;
 import io.strimzi.api.kafka.model.common.SystemPropertyBuilder;
 import io.strimzi.api.kafka.model.common.authentication.KafkaClientAuthenticationTlsBuilder;
+import io.strimzi.api.kafka.model.common.metrics.OtlpResourceAttributeBuilder;
 import io.strimzi.api.kafka.model.common.template.AdditionalVolume;
 import io.strimzi.api.kafka.model.common.template.AdditionalVolumeBuilder;
 import io.strimzi.api.kafka.model.common.template.ContainerEnvVar;
@@ -1302,7 +1304,23 @@ public class KafkaBridgeClusterTest {
                     .withNewStrimziMetricsReporterConfig()
                         .withNewValues()
                             .withNewOtlp()
-                                .withEndpoint("http://my-collector:4317")
+                                .withEndpoint("https://my-collector:4317")
+                                .withResourceAttributes(new OtlpResourceAttributeBuilder()
+                                    .withName("k8s.pod.name")
+                                    .withNewValueFrom()
+                                        .withFieldRef(new ObjectFieldSelectorBuilder().withFieldPath("metadata.name").build())
+                                    .endValueFrom()
+                                    .build())
+                                .withNewTls()
+                                .withTrustedCertificates(new CertSecretSourceBuilder().withSecretName("collector-ca").withCertificate("ca.crt").build())
+                                .endTls()
+                                .withNewOtlpAuthenticationTls()
+                                .withNewCertificateAndKey()
+                                    .withSecretName("my-otlp-client")
+                                    .withCertificate("tls.crt")
+                                    .withKey("tls.key")
+                                .endCertificateAndKey()
+                                .endOtlpAuthenticationTls()
                             .endOtlp()
                         .endValues()
                     .endStrimziMetricsReporterConfig()
@@ -1313,13 +1331,15 @@ public class KafkaBridgeClusterTest {
 
         String config = kbc.generateBridgeConfigMap(METRICS_AND_LOGGING).getData().get(BRIDGE_CONFIGURATION_FILENAME);
         assertThat(config, containsString("bridge.metrics.otlp.enable=true"));
-        assertThat(config, containsString("bridge.metrics.otlp.endpoint=http://my-collector:4317"));
+        assertThat(config, containsString("bridge.metrics.otlp.endpoint=https://my-collector:4317"));
+        assertThat(config, containsString("bridge.metrics.otlp.ssl.truststore.certificates=${strimzisecrets:"));
+        assertThat(kbc.secretsToAllowAccessTo(), hasItems(kbc.getComponentName() + "-otlp-trusted-certs", "my-otlp-client"));
         assertThat(config, not(containsString("bridge.metrics.endpoint.enable")));
         assertThat(config, not(containsString("kafka.prometheus.metrics.reporter.otlp")));
 
         Deployment dep = kbc.generateDeployment(new HashMap<>(), true, null, null);
         assertThat(dep.getSpec().getTemplate().getSpec().getContainers().get(0).getEnv().stream().map(EnvVar::getName).toList(),
-                hasItems(StrimziMetricsReporterModel.ENV_VAR_POD_NAME, StrimziMetricsReporterModel.ENV_VAR_NODE_NAME));
+                hasItems("STRIMZI_OTLP_RESOURCE_ATTRIBUTE_0"));
     }
 
     @Test

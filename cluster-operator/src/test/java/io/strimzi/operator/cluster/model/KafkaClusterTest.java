@@ -10,6 +10,7 @@ import io.fabric8.kubernetes.api.model.ConfigMapKeySelectorBuilder;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.IntOrString;
 import io.fabric8.kubernetes.api.model.LabelSelectorRequirementBuilder;
+import io.fabric8.kubernetes.api.model.ObjectFieldSelectorBuilder;
 import io.fabric8.kubernetes.api.model.Quantity;
 import io.fabric8.kubernetes.api.model.ResourceRequirements;
 import io.fabric8.kubernetes.api.model.ResourceRequirementsBuilder;
@@ -24,10 +25,12 @@ import io.fabric8.kubernetes.api.model.policy.v1.PodDisruptionBudget;
 import io.fabric8.kubernetes.api.model.rbac.ClusterRoleBinding;
 import io.fabric8.kubernetes.api.model.rbac.Role;
 import io.fabric8.kubernetes.api.model.rbac.RoleBinding;
+import io.strimzi.api.kafka.model.common.CertSecretSourceBuilder;
 import io.strimzi.api.kafka.model.common.jmx.KafkaJmxAuthenticationPasswordBuilder;
 import io.strimzi.api.kafka.model.common.jmx.KafkaJmxOptionsBuilder;
 import io.strimzi.api.kafka.model.common.metrics.JmxPrometheusExporterMetricsBuilder;
 import io.strimzi.api.kafka.model.common.metrics.MetricsConfig;
+import io.strimzi.api.kafka.model.common.metrics.OtlpResourceAttributeBuilder;
 import io.strimzi.api.kafka.model.kafka.JbodStorageBuilder;
 import io.strimzi.api.kafka.model.kafka.Kafka;
 import io.strimzi.api.kafka.model.kafka.KafkaBuilder;
@@ -264,7 +267,23 @@ public class KafkaClusterTest {
                                     .withEnabled(false)
                                 .endPrometheusEndpoint()
                                 .withNewOtlp()
-                                    .withEndpoint("http://my-collector:4317")
+                                    .withEndpoint("https://my-collector:4317")
+                                    .withResourceAttributes(new OtlpResourceAttributeBuilder()
+                                            .withName("k8s.pod.name")
+                                            .withNewValueFrom()
+                                                .withFieldRef(new ObjectFieldSelectorBuilder().withFieldPath("metadata.name").build())
+                                            .endValueFrom()
+                                            .build())
+                                    .withNewTls()
+                                        .withTrustedCertificates(new CertSecretSourceBuilder().withSecretName("collector-ca").withCertificate("ca.crt").build())
+                                    .endTls()
+                                    .withNewOtlpAuthenticationTls()
+                                        .withNewCertificateAndKey()
+                                            .withSecretName("my-otlp-client")
+                                            .withCertificate("tls.crt")
+                                            .withKey("tls.key")
+                                        .endCertificateAndKey()
+                                    .endOtlpAuthenticationTls()
                                 .endOtlp()
                             .endValues()
                         .endStrimziMetricsReporterConfig()
@@ -281,10 +300,16 @@ public class KafkaClusterTest {
             assertThat(config, containsString(StrimziMetricsReporterConfig.LISTENER_ENABLE + "=false"));
             assertThat(config, not(containsString(StrimziMetricsReporterConfig.LISTENER + "=")));
             assertThat(config, containsString("prometheus.metrics.reporter.otlp.enable=true"));
-            assertThat(config, containsString("prometheus.metrics.reporter.otlp.endpoint=http://my-collector:4317"));
-            assertThat(config, containsString("prometheus.metrics.reporter.otlp.resource.attributes=k8s.namespace.name=" + NAMESPACE + ","));
-            assertThat(config, containsString("service.name=" + CLUSTER + ","));
+            assertThat(config, containsString("prometheus.metrics.reporter.otlp.endpoint=https://my-collector:4317"));
+            assertThat(config, containsString("prometheus.metrics.reporter.otlp.resource.attributes=k8s.pod.name=${strimzienv:STRIMZI_OTLP_RESOURCE_ATTRIBUTE_0}"));
+            assertThat(config, containsString("prometheus.metrics.reporter.otlp.ssl.truststore.certificates=${strimzisecrets:" + NAMESPACE + "/" + CLUSTER + "-kafka-otlp-trusted-certs:ca.crt}"));
+            assertThat(config, containsString("prometheus.metrics.reporter.otlp.ssl.keystore.key=${strimzisecrets:" + NAMESPACE + "/my-otlp-client:tls.key}"));
+            // No resource attributes are added by default
+            assertThat(config, not(containsString("service.name=")));
         }
+
+        // The pods can read the Secrets with the OTLP TLS certificates
+        assertThat(kc.generateRole().getRules().get(0).getResourceNames(), hasItems(CLUSTER + "-kafka-otlp-trusted-certs", "my-otlp-client"));
 
         // Metrics are pushed, so nothing has to connect to the pods
         NetworkPolicy np = kc.generateNetworkPolicy(null, null);
@@ -293,10 +318,8 @@ public class KafkaClusterTest {
         kc.generatePodSets(null, null, node -> Map.of()).forEach(podSet -> PodSetUtils.podSetToPods(podSet).forEach(pod -> {
             Container container = pod.getSpec().getContainers().get(0);
             assertThat(container.getPorts().stream().anyMatch(port -> MetricsModel.METRICS_PORT_NAME.equals(port.getName())), is(false));
-            assertThat(container.getEnv().stream().anyMatch(env -> StrimziMetricsReporterModel.ENV_VAR_POD_NAME.equals(env.getName())
+            assertThat(container.getEnv().stream().anyMatch(env -> "STRIMZI_OTLP_RESOURCE_ATTRIBUTE_0".equals(env.getName())
                     && "metadata.name".equals(env.getValueFrom().getFieldRef().getFieldPath())), is(true));
-            assertThat(container.getEnv().stream().anyMatch(env -> StrimziMetricsReporterModel.ENV_VAR_NODE_NAME.equals(env.getName())
-                    && "spec.nodeName".equals(env.getValueFrom().getFieldRef().getFieldPath())), is(true));
         }));
     }
 

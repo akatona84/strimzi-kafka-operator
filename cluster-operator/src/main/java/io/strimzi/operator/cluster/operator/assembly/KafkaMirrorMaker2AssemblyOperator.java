@@ -136,6 +136,13 @@ public class KafkaMirrorMaker2AssemblyOperator extends AbstractConnectOperator<K
                     podAnnotations.put(Annotations.ANNO_STRIMZI_AUTH_HASH, Integer.toString(hash));
                     return Future.succeededFuture();
                 })
+                .compose(i -> VertxUtil.toFuture(ReconcilerUtils.reconcileOtlpTls(reconciliation, secretOperations, mirrorMaker2Cluster, mirrorMaker2Cluster.metrics())))
+                .compose(otlpTlsHash -> {
+                    if (otlpTlsHash != null) {
+                        podAnnotations.put(Annotations.ANNO_STRIMZI_OTLP_TLS_HASH, otlpTlsHash);
+                    }
+                    return Future.succeededFuture();
+                })
                 .compose(i -> generateMetricsAndLoggingConfigMap(reconciliation, mirrorMaker2Cluster))
                 .compose(logAndMetricsConfigMap -> {
                     podAnnotations.put(Annotations.ANNO_STRIMZI_IO_CONFIGURATION_HASH, Util.hashStub(logAndMetricsConfigMap.getData().get(KafkaMirrorMaker2Cluster.KAFKA_CONNECT_CONFIGURATION_FILENAME)));

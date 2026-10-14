@@ -1705,6 +1705,10 @@ public class KafkaCluster extends AbstractModel implements SupportsMetrics, Supp
             }
         }
 
+        if (metrics instanceof StrimziMetricsReporterModel reporterModel) {
+            certSecretNames.addAll(reporterModel.otlpSecretsToAccess(componentName));
+        }
+
         if (certSecretNames.isEmpty()) {
             // This should never happen but just in case it does, we throw an error
             throw new RuntimeException("No TLS certificate secrets found for the Kafka cluster.");
@@ -1886,7 +1890,7 @@ public class KafkaCluster extends AbstractModel implements SupportsMetrics, Supp
                 .withCruiseControl(cluster, ccMetricsReporter, node.broker())
                 .withTieredStorage(cluster, tieredStorage)
                 .withQuotas(cluster, quotas)
-                .withStrimziMetricsReporter(metrics, metricsOtlpConfiguration(pool))
+                .withStrimziMetricsReporter(metrics, metricsOtlpConfiguration())
                 .withUserConfiguration(
                         configuration,
                         node.broker() && ccMetricsReporter != null,
@@ -1896,15 +1900,13 @@ public class KafkaCluster extends AbstractModel implements SupportsMetrics, Supp
     }
 
     /**
-     * Gets the OTLP configuration of the Strimzi Metrics Reporter for the nodes of a pool.
-     *
-     * @param pool  Pool to which the nodes belong. Its container template can set the OpenTelemetry service name.
+     * Gets the OTLP configuration of the Strimzi Metrics Reporter.
      *
      * @return  Map with the OTLP configuration, empty when OTLP is not enabled
      */
-    private Map<String, String> metricsOtlpConfiguration(KafkaPool pool) {
+    private Map<String, String> metricsOtlpConfiguration() {
         return metrics instanceof StrimziMetricsReporterModel reporterModel
-                ? reporterModel.otlpConfiguration(namespace, cluster, KAFKA_NAME, pool.templateContainer)
+                ? reporterModel.otlpConfiguration(namespace, componentName)
                 : Map.of();
     }
 

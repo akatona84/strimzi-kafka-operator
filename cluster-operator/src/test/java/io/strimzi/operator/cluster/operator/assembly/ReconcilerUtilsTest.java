@@ -24,6 +24,7 @@ import io.strimzi.api.kafka.model.common.authentication.KafkaClientAuthenticatio
 import io.strimzi.api.kafka.model.common.authentication.KafkaClientAuthenticationPlain;
 import io.strimzi.api.kafka.model.common.authentication.KafkaClientAuthenticationScramSha512;
 import io.strimzi.api.kafka.model.common.authentication.KafkaClientAuthenticationScramSha512Builder;
+import io.strimzi.api.kafka.model.connect.KafkaConnectSpecBuilder;
 import io.strimzi.api.kafka.model.kafka.KafkaClusterSpec;
 import io.strimzi.api.kafka.model.kafka.KafkaClusterSpecBuilder;
 import io.strimzi.api.kafka.model.kafka.KafkaResources;
@@ -33,6 +34,7 @@ import io.strimzi.api.kafka.model.podset.StrimziPodSet;
 import io.strimzi.api.kafka.model.podset.StrimziPodSetBuilder;
 import io.strimzi.operator.cluster.ResourceUtils;
 import io.strimzi.operator.cluster.auth.RequestedServiceAccountAuthIdentity;
+import io.strimzi.operator.cluster.model.AbstractModel;
 import io.strimzi.operator.cluster.model.NodeRef;
 import io.strimzi.operator.cluster.model.PodRevision;
 import io.strimzi.operator.cluster.model.PodSetUtils;
@@ -43,6 +45,7 @@ import io.strimzi.operator.cluster.model.clustersecurity.kafka.NoneEncryptionCon
 import io.strimzi.operator.cluster.model.clustersecurity.kafka.TlsEncryptionConfiguration;
 import io.strimzi.operator.cluster.model.jmx.JmxModel;
 import io.strimzi.operator.cluster.model.jmx.SupportsJmx;
+import io.strimzi.operator.cluster.model.metrics.StrimziMetricsReporterModel;
 import io.strimzi.operator.common.Annotations;
 import io.strimzi.operator.common.Reconciliation;
 import io.strimzi.operator.common.Util;
@@ -885,5 +888,84 @@ public class ReconcilerUtilsTest {
         public JmxModel jmx() {
             return jmx;
         }
+    }
+
+    @Test
+    public void testReconcileOtlpTlsNotConfigured() {
+        SecretOperator mockSecretOps = mock(SecretOperator.class);
+        StrimziMetricsReporterModel metrics = new StrimziMetricsReporterModel(new KafkaConnectSpecBuilder()
+                .withNewStrimziMetricsReporterConfig()
+                    .withNewValues()
+                        .withNewOtlp()
+                            .withEndpoint("http://my-collector:4317")
+                        .endOtlp()
+                    .endValues()
+                .endStrimziMetricsReporterConfig()
+                .build());
+
+        String hash = ReconcilerUtils.reconcileOtlpTls(Reconciliation.DUMMY_RECONCILIATION, mockSecretOps, mock(AbstractModel.class), metrics).toCompletableFuture().join();
+
+        // Without OTLP TLS, no Kubernetes API calls are made and no annotation is set
+        assertThat(hash, is(nullValue()));
+        verifyNoInteractions(mockSecretOps);
+    }
+
+    @Test
+    public void testReconcileOtlpTls() {
+        SecretOperator mockSecretOps = mock(SecretOperator.class);
+        when(mockSecretOps.getAsync(NAMESPACE, "collector-ca")).thenReturn(CompletableFuture.completedFuture(new SecretBuilder()
+                .withNewMetadata().withName("collector-ca").withNamespace(NAMESPACE).endMetadata()
+                .withData(Map.of("ca.crt", Util.encodeToBase64(DUMMY_CERT)))
+                .build()));
+        when(mockSecretOps.getAsync(NAMESPACE, "my-client"))
+                .thenReturn(CompletableFuture.completedFuture(otlpClientSecret("key1")))
+                .thenReturn(CompletableFuture.completedFuture(otlpClientSecret("key2")));
+        ArgumentCaptor<Secret> secretCaptor = ArgumentCaptor.forClass(Secret.class);
+        when(mockSecretOps.reconcile(any(), eq(NAMESPACE), eq("my-connect-connect-otlp-trusted-certs"), secretCaptor.capture()))
+                .thenAnswer(i -> CompletableFuture.completedFuture(ReconcileResult.created(i.getArgument(3))));
+
+        AbstractModel model = mock(AbstractModel.class);
+        when(model.getComponentName()).thenReturn("my-connect-connect");
+        when(model.generateOtlpTrustedCertsSecret(anyString())).thenAnswer(i -> new SecretBuilder()
+                .withNewMetadata().withName("my-connect-connect-otlp-trusted-certs").endMetadata()
+                .withData(Map.of(StrimziMetricsReporterModel.OTLP_TRUSTED_CERTS_KEY, Util.encodeToBase64(i.getArgument(0))))
+                .build());
+
+        StrimziMetricsReporterModel metrics = new StrimziMetricsReporterModel(new KafkaConnectSpecBuilder()
+                .withNewStrimziMetricsReporterConfig()
+                    .withNewValues()
+                        .withNewOtlp()
+                            .withEndpoint("https://my-collector:4317")
+                            .withNewTls()
+                                .withTrustedCertificates(new CertSecretSourceBuilder().withSecretName("collector-ca").withCertificate("ca.crt").build())
+                            .endTls()
+                            .withNewOtlpAuthenticationTls()
+                                .withNewCertificateAndKey()
+                                    .withSecretName("my-client")
+                                    .withCertificate("tls.crt")
+                                    .withKey("tls.key")
+                                .endCertificateAndKey()
+                            .endOtlpAuthenticationTls()
+                        .endOtlp()
+                    .endValues()
+                .endStrimziMetricsReporterConfig()
+                .build());
+
+        String hash1 = ReconcilerUtils.reconcileOtlpTls(new Reconciliation("test", "KafkaConnect", NAMESPACE, "my-connect"), mockSecretOps, model, metrics).toCompletableFuture().join();
+        String hash2 = ReconcilerUtils.reconcileOtlpTls(new Reconciliation("test", "KafkaConnect", NAMESPACE, "my-connect"), mockSecretOps, model, metrics).toCompletableFuture().join();
+
+        // The trusted certificates are aggregated into the internal Secret
+        assertThat(Util.decodeFromBase64(secretCaptor.getValue().getData().get(StrimziMetricsReporterModel.OTLP_TRUSTED_CERTS_KEY)), containsString("BEGIN CERTIFICATE"));
+
+        // The hash changes when the client key changes, so that the pods are rolled
+        assertThat(hash1, is(notNullValue()));
+        assertThat(hash1.equals(hash2), is(false));
+    }
+
+    private static Secret otlpClientSecret(String key) {
+        return new SecretBuilder()
+                .withNewMetadata().withName("my-client").withNamespace(NAMESPACE).endMetadata()
+                .withData(Map.of("tls.crt", Util.encodeToBase64(DUMMY_CERT), "tls.key", Util.encodeToBase64(key)))
+                .build();
     }
 }

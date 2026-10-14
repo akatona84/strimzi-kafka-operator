@@ -590,10 +590,16 @@ public class KafkaBridgeCluster extends AbstractModel implements SupportsLogging
      *          configuration providers.
      */
     /* test */ public Set<String> secretsToAllowAccessTo() {
-        return AuthenticationUtils.getAuthenticationSecretsToAccess(
+        Set<String> secretNames = AuthenticationUtils.getAuthenticationSecretsToAccess(
                 tls,
                 authentication,
                 KafkaBridgeResources.internalTlsTrustedCertsSecretName(cluster));
+
+        if (metrics instanceof StrimziMetricsReporterModel reporterModel) {
+            secretNames.addAll(reporterModel.otlpSecretsToAccess(componentName));
+        }
+
+        return secretNames;
     }
 
     /**
@@ -683,7 +689,7 @@ public class KafkaBridgeCluster extends AbstractModel implements SupportsLogging
             builder.withJmxPrometheusExporter(jmxPrometheusExporterModel);
         } else if (metrics instanceof StrimziMetricsReporterModel strimziMetricsReporterModel) {
             builder.withStrimziMetricsReporter(strimziMetricsReporterModel, DEFAULT_METRICS_ALLOW_LIST,
-                    strimziMetricsReporterModel.otlpConfiguration(namespace, cluster, componentName, templateContainer));
+                    strimziMetricsReporterModel.otlpConfiguration(namespace, componentName));
         }
 
         data.put(BRIDGE_CONFIGURATION_FILENAME, builder.build());

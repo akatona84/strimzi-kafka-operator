@@ -52,5 +52,14 @@ public class StrimziMetricsReporterConfig {
     /** Set a comma separated list of key=value resource attributes. */
     public static final String OTLP_RESOURCE_ATTRIBUTES = "otlp.resource.attributes";
 
+    /** Set the trusted certificates of the OTLP endpoint, in PEM format. */
+    public static final String OTLP_SSL_TRUSTSTORE_CERTIFICATES = "otlp.ssl.truststore.certificates";
+
+    /** Set the client certificate chain used for mTLS with the OTLP endpoint, in PEM format. */
+    public static final String OTLP_SSL_KEYSTORE_CERTIFICATE_CHAIN = "otlp.ssl.keystore.certificate.chain";
+
+    /** Set the client private key used for mTLS with the OTLP endpoint, in PEM format. */
+    public static final String OTLP_SSL_KEYSTORE_KEY = "otlp.ssl.keystore.key";
+
     private StrimziMetricsReporterConfig() { }
 }

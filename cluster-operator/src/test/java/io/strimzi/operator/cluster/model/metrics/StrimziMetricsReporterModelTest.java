@@ -5,12 +5,13 @@
 package io.strimzi.operator.cluster.model.metrics;
 
 import io.fabric8.kubernetes.api.model.EnvVar;
+import io.fabric8.kubernetes.api.model.ObjectFieldSelectorBuilder;
+import io.strimzi.api.kafka.model.common.CertSecretSourceBuilder;
 import io.strimzi.api.kafka.model.common.metrics.OtlpProtocol;
+import io.strimzi.api.kafka.model.common.metrics.OtlpResourceAttribute;
+import io.strimzi.api.kafka.model.common.metrics.OtlpResourceAttributeBuilder;
 import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporter;
 import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporterBuilder;
-import io.strimzi.api.kafka.model.common.template.ContainerEnvVarBuilder;
-import io.strimzi.api.kafka.model.common.template.ContainerTemplate;
-import io.strimzi.api.kafka.model.common.template.ContainerTemplateBuilder;
 import io.strimzi.api.kafka.model.connect.KafkaConnectSpecBuilder;
 import io.strimzi.api.kafka.model.kafka.KafkaClusterSpecBuilder;
 import io.strimzi.operator.common.InvalidConfigurationException;
@@ -94,8 +95,10 @@ public class StrimziMetricsReporterModelTest {
 
         assertThat(metrics.isPrometheusEndpointEnabled(), is(true));
         assertThat(metrics.isOtlpEnabled(), is(false));
+        assertThat(metrics.isOtlpTlsConfigured(), is(false));
         assertThat(metrics.envVars(), is(empty()));
-        assertThat(metrics.otlpConfiguration("my-namespace", "my-cluster", "kafka", null), is(anEmptyMap()));
+        assertThat(metrics.otlpSecretsToAccess("my-cluster-kafka"), is(empty()));
+        assertThat(metrics.otlpConfiguration("my-namespace", "my-cluster-kafka"), is(anEmptyMap()));
     }
 
     @Test
@@ -117,23 +120,13 @@ public class StrimziMetricsReporterModelTest {
 
         assertThat(metrics.isPrometheusEndpointEnabled(), is(false));
         assertThat(metrics.isOtlpEnabled(), is(true));
-        assertThat(metrics.envVars().stream().map(EnvVar::getName).toList(),
-                is(List.of(StrimziMetricsReporterModel.ENV_VAR_POD_NAME, StrimziMetricsReporterModel.ENV_VAR_NODE_NAME)));
-        assertThat(metrics.envVars().get(0).getValueFrom().getFieldRef().getFieldPath(), is("metadata.name"));
-        assertThat(metrics.envVars().get(1).getValueFrom().getFieldRef().getFieldPath(), is("spec.nodeName"));
-
-        assertThat(metrics.otlpConfiguration("my-namespace", "my-cluster", "kafka", null), is(Map.of(
+        // No resource attributes are set by default, so no environment variables are needed
+        assertThat(metrics.envVars(), is(empty()));
+        assertThat(metrics.otlpConfiguration("my-namespace", "my-cluster-kafka"), is(Map.of(
                 StrimziMetricsReporterConfig.OTLP_ENABLE, "true",
                 StrimziMetricsReporterConfig.OTLP_ENDPOINT, "http://my-collector:4317",
                 StrimziMetricsReporterConfig.OTLP_PROTOCOL, "grpc",
-                StrimziMetricsReporterConfig.OTLP_INTERVAL_SECONDS, "30",
-                StrimziMetricsReporterConfig.OTLP_RESOURCE_ATTRIBUTES, "k8s.namespace.name=my-namespace,"
-                        + "k8s.pod.name=${strimzienv:STRIMZI_POD_NAME},"
-                        + "k8s.container.name=kafka,"
-                        + "k8s.node.name=${strimzienv:STRIMZI_NODE_NAME},"
-                        + "service.name=my-cluster,"
-                        + "service.namespace=my-namespace,"
-                        + "service.instance.id=my-namespace.${strimzienv:STRIMZI_POD_NAME}.kafka")));
+                StrimziMetricsReporterConfig.OTLP_INTERVAL_SECONDS, "30")));
     }
 
     @Test
@@ -148,51 +141,103 @@ public class StrimziMetricsReporterModelTest {
                 .build());
 
         assertThat(metrics.isPrometheusEndpointEnabled(), is(true));
-        assertThat(metrics.otlpConfiguration("my-namespace", "my-cluster", "kafka", null).keySet(),
-                is(Set.of(StrimziMetricsReporterConfig.OTLP_ENABLE, StrimziMetricsReporterConfig.OTLP_RESOURCE_ATTRIBUTES)));
+        assertThat(metrics.otlpConfiguration("my-namespace", "my-cluster-kafka").keySet(),
+                is(Set.of(StrimziMetricsReporterConfig.OTLP_ENABLE)));
     }
 
     @Test
-    public void testOtlpUserResourceAttributes() {
+    public void testOtlpResourceAttributes() {
         StrimziMetricsReporterModel metrics = new StrimziMetricsReporterModel(new KafkaClusterSpecBuilder()
                 .withMetricsConfig(new StrimziMetricsReporterBuilder()
                         .withNewValues()
                             .withNewOtlp()
-                                .withResourceAttributes(Map.of(
-                                        "service.name", "my-service",
-                                        "team", "a,b=c d"))
+                                .withResourceAttributes(
+                                        new OtlpResourceAttributeBuilder().withName("team").withValue("a,b=c d").build(),
+                                        fieldRefAttribute("k8s.pod.name", "metadata.name"),
+                                        fieldRefAttribute("k8s.node.name", "spec.nodeName"),
+                                        new OtlpResourceAttributeBuilder().withName("service.name").withValue("my-service").build())
                             .endOtlp()
                         .endValues()
                         .build())
                 .build());
 
-        String attributes = metrics.otlpConfiguration("my-namespace", "my-cluster", "kafka", null)
-                .get(StrimziMetricsReporterConfig.OTLP_RESOURCE_ATTRIBUTES);
-        // The user value replaces the operator one and is percent-encoded
-        assertThat(attributes.contains("service.name=my-service,"), is(true));
-        assertThat(attributes.contains("service.name=my-cluster"), is(false));
-        assertThat(attributes.contains("team=a%2Cb%3Dc%20d"), is(true));
+        // One environment variable per attribute taken from the pod, named after the index of the attribute
+        List<EnvVar> envVars = metrics.envVars();
+        assertThat(envVars.stream().map(EnvVar::getName).toList(), is(List.of("STRIMZI_OTLP_RESOURCE_ATTRIBUTE_1", "STRIMZI_OTLP_RESOURCE_ATTRIBUTE_2")));
+        assertThat(envVars.get(0).getValueFrom().getFieldRef().getFieldPath(), is("metadata.name"));
+        assertThat(envVars.get(1).getValueFrom().getFieldRef().getFieldPath(), is("spec.nodeName"));
+
+        // Static values are percent-encoded, the values from the pod are referenced with placeholders
+        assertThat(metrics.otlpConfiguration("my-namespace", "my-cluster-kafka").get(StrimziMetricsReporterConfig.OTLP_RESOURCE_ATTRIBUTES),
+                is("team=a%2Cb%3Dc%20d,"
+                        + "k8s.pod.name=${strimzienv:STRIMZI_OTLP_RESOURCE_ATTRIBUTE_1},"
+                        + "k8s.node.name=${strimzienv:STRIMZI_OTLP_RESOURCE_ATTRIBUTE_2},"
+                        + "service.name=my-service"));
     }
 
     @Test
-    public void testOtlpServiceNameFromContainerTemplate() {
+    public void testOtlpTls() {
         StrimziMetricsReporterModel metrics = new StrimziMetricsReporterModel(new KafkaClusterSpecBuilder()
                 .withMetricsConfig(new StrimziMetricsReporterBuilder()
                         .withNewValues()
                             .withNewOtlp()
+                                .withEndpoint("https://my-collector:4317")
+                                .withNewTls()
+                                    .withTrustedCertificates(new CertSecretSourceBuilder().withSecretName("collector-ca").withCertificate("ca.crt").build())
+                                .endTls()
+                                .withNewOtlpAuthenticationTls()
+                                    .withNewCertificateAndKey()
+                                        .withSecretName("my-client")
+                                        .withCertificate("tls.crt")
+                                        .withKey("tls.key")
+                                    .endCertificateAndKey()
+                                .endOtlpAuthenticationTls()
                             .endOtlp()
                         .endValues()
                         .build())
                 .build());
-        ContainerTemplate template = new ContainerTemplateBuilder()
-                .withEnv(new ContainerEnvVarBuilder().withName("OTEL_SERVICE_NAME").withValue("my-tracing-service").build())
+
+        assertThat(metrics.isOtlpTlsConfigured(), is(true));
+        assertThat(StrimziMetricsReporterModel.otlpTrustedCertsSecretName("my-cluster-kafka"), is("my-cluster-kafka-otlp-trusted-certs"));
+        assertThat(metrics.otlpSecretsToAccess("my-cluster-kafka"), is(Set.of("my-cluster-kafka-otlp-trusted-certs", "my-client")));
+
+        Map<String, String> configuration = metrics.otlpConfiguration("my-namespace", "my-cluster-kafka");
+        assertThat(configuration.get(StrimziMetricsReporterConfig.OTLP_SSL_TRUSTSTORE_CERTIFICATES),
+                is("${strimzisecrets:my-namespace/my-cluster-kafka-otlp-trusted-certs:ca.crt}"));
+        assertThat(configuration.get(StrimziMetricsReporterConfig.OTLP_SSL_KEYSTORE_CERTIFICATE_CHAIN),
+                is("${strimzisecrets:my-namespace/my-client:tls.crt}"));
+        assertThat(configuration.get(StrimziMetricsReporterConfig.OTLP_SSL_KEYSTORE_KEY),
+                is("${strimzisecrets:my-namespace/my-client:tls.key}"));
+    }
+
+    @Test
+    public void testOtlpTrustedCertificatesOnly() {
+        StrimziMetricsReporterModel metrics = new StrimziMetricsReporterModel(new KafkaClusterSpecBuilder()
+                .withMetricsConfig(new StrimziMetricsReporterBuilder()
+                        .withNewValues()
+                            .withNewOtlp()
+                                .withNewTls()
+                                    .withTrustedCertificates(new CertSecretSourceBuilder().withSecretName("collector-ca").withPattern("*.crt").build())
+                                .endTls()
+                            .endOtlp()
+                        .endValues()
+                        .build())
+                .build());
+
+        assertThat(metrics.otlpCertificateAndKey(), is((Object) null));
+        assertThat(metrics.otlpSecretsToAccess("my-connect-connect"), is(Set.of("my-connect-connect-otlp-trusted-certs")));
+        Map<String, String> configuration = metrics.otlpConfiguration("my-namespace", "my-connect-connect");
+        assertThat(configuration.containsKey(StrimziMetricsReporterConfig.OTLP_SSL_TRUSTSTORE_CERTIFICATES), is(true));
+        assertThat(configuration.containsKey(StrimziMetricsReporterConfig.OTLP_SSL_KEYSTORE_KEY), is(false));
+    }
+
+    private static OtlpResourceAttribute fieldRefAttribute(String name, String fieldPath) {
+        return new OtlpResourceAttributeBuilder()
+                .withName(name)
+                .withNewValueFrom()
+                    .withFieldRef(new ObjectFieldSelectorBuilder().withFieldPath(fieldPath).build())
+                .endValueFrom()
                 .build();
-
-        // The service name configured for tracing applies to the metrics as well
-        String attributes = metrics.otlpConfiguration("my-namespace", "my-cluster", "kafka", template)
-                .get(StrimziMetricsReporterConfig.OTLP_RESOURCE_ATTRIBUTES);
-        assertThat(attributes.contains("service.name="), is(false));
-        assertThat(attributes.contains("service.instance.id="), is(true));
     }
 
     @Test
@@ -204,6 +249,10 @@ public class StrimziMetricsReporterModelTest {
                     .endPrometheusEndpoint()
                     .withNewOtlp()
                         .withEndpoint("https://my-collector:4318")
+                        .withResourceAttributes(
+                                fieldRefAttribute("a", "metadata.name"),
+                                fieldRefAttribute("b", "metadata.labels['strimzi.io/cluster']"),
+                                fieldRefAttribute("c", "status.podIP"))
                     .endOtlp()
                 .endValues()
                 .build())
@@ -231,5 +280,19 @@ public class StrimziMetricsReporterModelTest {
                         .build())
         );
         assertThat(ise1.getMessage(), is("Metrics configuration is invalid: [OTLP endpoint must start with http:// or https://, OTLP interval must be at least 1 second]"));
+
+        InvalidResourceException ise2 = assertThrows(InvalidResourceException.class, () -> StrimziMetricsReporterModel.validate(
+                new StrimziMetricsReporterBuilder()
+                        .withNewValues()
+                            .withNewOtlp()
+                                .withResourceAttributes(
+                                        fieldRefAttribute("a", "spec.containers[0].image"),
+                                        new OtlpResourceAttributeBuilder().withName("b").build())
+                            .endOtlp()
+                        .endValues()
+                        .build())
+        );
+        assertThat(ise2.getMessage(), is("Metrics configuration is invalid: [OTLP resource attribute a uses an unsupported fieldPath: spec.containers[0].image, "
+                + "OTLP resource attribute b must have either value or valueFrom]"));
     }
 }

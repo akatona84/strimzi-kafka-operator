@@ -49,35 +49,59 @@ spec:
         prometheusEndpoint:
           enabled: false # <1>
         otlp:
-          endpoint: http://otel-collector.observability.svc:4317 # <2>
+          endpoint: https://otel-collector.observability.svc:4317 # <2>
           protocol: grpc # <3>
           intervalSeconds: 30 # <4>
           resourceAttributes: # <5>
-            deployment.environment.name: production
+            - name: deployment.environment.name
+              value: production
+            - name: service.instance.id
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          tls: # <6>
+            trustedCertificates:
+              - secretName: otel-collector-ca
+                certificate: ca.crt
+          authentication: # <7>
+            type: tls
+            certificateAndKey:
+              secretName: my-otlp-client
+              certificate: tls.crt
+              key: tls.key
 ----
 <1> (Optional) Disables the Prometheus endpoint, so the metrics are only pushed. When the Prometheus endpoint is disabled, the metrics port and its network policy rule are not created. By default, the Prometheus endpoint stays enabled.
-<2> (Optional) The OTLP endpoint. With the `http/protobuf` protocol, the `/v1/metrics` path is appended. When not set, the standard OpenTelemetry configuration applies, for example the `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable.
+<2> (Optional) The OTLP endpoint. The `https://` scheme enables TLS. With the `http/protobuf` protocol, the `/v1/metrics` path is appended. When not set, the standard OpenTelemetry configuration applies, for example the `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable.
 <3> (Optional) The OTLP transport protocol, `grpc` or `http/protobuf`. Defaults to `grpc`.
 <4> (Optional) The interval in seconds between two pushes. Defaults to 60 seconds.
-<5> (Optional) Additional resource attributes added to the pushed metrics.
+<5> (Optional) Resource attributes added to the pushed metrics. Each attribute has either a static `value`, or a `valueFrom.fieldRef` that takes the value from a field of the pod.
+<6> (Optional) Trusted certificates used to verify the OTLP endpoint. When not set, the default JVM trust store is used.
+<7> (Optional) TLS client authentication (mTLS) using a certificate and private key in PEM format.
 
 . Apply the changes to the custom resource configuration.
 +
-Changes to the `otlp` and `prometheusEndpoint` properties trigger a rolling update of the pods.
+Changes to the `otlp` and `prometheusEndpoint` properties, and to the certificates they reference, trigger a rolling update of the pods.
 
-Strimzi adds the following resource attributes to the pushed metrics, following the OpenTelemetry semantic conventions for Kubernetes:
+.Resource attributes
 
-* `k8s.namespace.name`, `k8s.pod.name`, `k8s.container.name`, and `k8s.node.name`
-* `service.name`, set to the name of the custom resource
-* `service.namespace`, set to the namespace
-* `service.instance.id`, set to `<namespace>.<pod_name>.<container_name>`
+Strimzi does not add any resource attributes by default.
+You can add them in the custom resource, or centrally in an OpenTelemetry Collector, for example with the `k8sattributes` processor.
 
-If you set the `OTEL_SERVICE_NAME` environment variable in the container template, for example for tracing, its value is used as the `service.name` of the metrics too.
-Resource attributes set in `resourceAttributes` replace the ones set by Strimzi.
+To take a value from the pod, use `valueFrom.fieldRef` with one of the fields supported by the Kubernetes Downward API for environment variables, such as `metadata.name`, `metadata.namespace`, `metadata.labels['<key>']` or `spec.nodeName`.
+Reading these fields does not require any RBAC permissions.
+
+Some backends need a unique identity for each pod.
+For example, the Prometheus OTLP receiver maps `service.instance.id` to the `instance` label.
+Most Kafka metrics have no label identifying the pod, so without a unique identity the series from different pods collide.
+
+If you set the `OTEL_SERVICE_NAME` environment variable in the container template, for example for tracing, its value is used as the `service.name` of the metrics, unless you set `service.name` in `resourceAttributes`.
 
 .Configuring TLS and authentication
 
-The settings that are not part of the `otlp` configuration, such as trusted certificates, client certificates, and headers, are configured using the standard OpenTelemetry environment variables in the container template.
-For example, use `OTEL_EXPORTER_OTLP_CERTIFICATE` with the path to a trusted certificate mounted from a secret using additional volumes, and `OTEL_EXPORTER_OTLP_HEADERS` referencing a secret to pass credentials.
+Strimzi passes the trusted certificates and the client certificate and key to the Strimzi Metrics Reporter with the Kubernetes Secret configuration provider, so they are not stored in the generated configuration.
+The pods are given access to these secrets.
+
+Other settings, such as headers used for token-based authentication, are configured using the standard OpenTelemetry environment variables in the container template.
+For example, use `OTEL_EXPORTER_OTLP_HEADERS` with `valueFrom.secretKeyRef` to pass credentials from a secret.
 Use the `OTEL_EXPORTER_OTLP_METRICS_*` variants when the settings must only apply to metrics, and not to traces.
 The values configured in the `otlp` property take precedence over the environment variables.

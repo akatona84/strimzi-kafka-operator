@@ -6,16 +6,17 @@ package io.strimzi.api.kafka.model.common.metrics;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+import io.strimzi.api.kafka.model.common.ClientTls;
 import io.strimzi.api.kafka.model.common.Constants;
 import io.strimzi.api.kafka.model.common.UnknownPropertyPreserving;
 import io.strimzi.crdgenerator.annotations.Description;
 import io.strimzi.crdgenerator.annotations.Minimum;
-import io.strimzi.crdgenerator.annotations.Pattern;
 import io.sundr.builder.annotations.Buildable;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -26,21 +27,21 @@ import java.util.Map;
         builderPackage = Constants.FABRIC8_KUBERNETES_API
 )
 @JsonInclude(JsonInclude.Include.NON_NULL)
-@JsonPropertyOrder({"endpoint", "protocol", "intervalSeconds", "resourceAttributes"})
+@JsonPropertyOrder({"endpoint", "protocol", "intervalSeconds", "resourceAttributes", "tls", "authentication"})
 @EqualsAndHashCode
 @ToString
 public class StrimziMetricsReporterOtlp implements UnknownPropertyPreserving {
     private String endpoint;
     private OtlpProtocol protocol;
     private Integer intervalSeconds;
-    private Map<String, String> resourceAttributes;
+    private List<OtlpResourceAttribute> resourceAttributes;
+    private ClientTls tls;
+    private OtlpAuthentication authentication;
     private Map<String, Object> additionalProperties;
 
-    @Description("The OTLP endpoint the metrics are pushed to, for example `http://my-collector:4317`. " +
-            "It must start with `http://` or `https://`. " +
+    @Description("The OTLP endpoint the metrics are pushed to, in the `http://<HOST>:<PORT>` or `https://<HOST>:<PORT>` format, for example `http://my-collector:4317`. " +
             "With the `http/protobuf` protocol, the `/v1/metrics` path is appended. " +
             "When not set, the standard OpenTelemetry configuration applies, for example the `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable set in the container template.")
-    @Pattern("^https?://.+$")
     @JsonInclude(value = JsonInclude.Include.NON_NULL)
     public String getEndpoint() {
         return endpoint;
@@ -73,15 +74,37 @@ public class StrimziMetricsReporterOtlp implements UnknownPropertyPreserving {
         this.intervalSeconds = intervalSeconds;
     }
 
-    @Description("Additional resource attributes added to the pushed metrics. " +
-            "They override the attributes set by the operator, such as `service.name`, for the same keys.")
+    @Description("Resource attributes added to the pushed metrics, for example to identify the pod they come from. " +
+            "Each attribute has a `name`, and either a static `value` or a `valueFrom` taking the value from a field of the pod. " +
+            "No resource attributes are added by default.")
     @JsonInclude(value = JsonInclude.Include.NON_EMPTY)
-    public Map<String, String> getResourceAttributes() {
+    public List<OtlpResourceAttribute> getResourceAttributes() {
         return resourceAttributes;
     }
 
-    public void setResourceAttributes(Map<String, String> resourceAttributes) {
+    public void setResourceAttributes(List<OtlpResourceAttribute> resourceAttributes) {
         this.resourceAttributes = resourceAttributes;
+    }
+
+    @Description("TLS configuration for connecting to an `https://` OTLP endpoint. " +
+            "When `trustedCertificates` is not set, the server certificate is verified against the default JVM trust store.")
+    @JsonInclude(value = JsonInclude.Include.NON_NULL)
+    public ClientTls getTls() {
+        return tls;
+    }
+
+    public void setTls(ClientTls tls) {
+        this.tls = tls;
+    }
+
+    @Description("Authentication configuration for connecting to the OTLP endpoint.")
+    @JsonInclude(value = JsonInclude.Include.NON_NULL)
+    public OtlpAuthentication getAuthentication() {
+        return authentication;
+    }
+
+    public void setAuthentication(OtlpAuthentication authentication) {
+        this.authentication = authentication;
     }
 
     @Override

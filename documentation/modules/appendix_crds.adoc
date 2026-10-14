@@ -347,7 +347,7 @@ Typically, this is a `Gateway` resource.
 [id='type-CertAndKeySecretSource-{context}']
 = `CertAndKeySecretSource` schema reference
 
-Used in: xref:type-GenericKafkaListenerConfiguration-{context}[`GenericKafkaListenerConfiguration`], xref:type-KafkaBridgeHttpTls-{context}[`KafkaBridgeHttpTls`], xref:type-KafkaClientAuthenticationTls-{context}[`KafkaClientAuthenticationTls`]
+Used in: xref:type-GenericKafkaListenerConfiguration-{context}[`GenericKafkaListenerConfiguration`], xref:type-KafkaBridgeHttpTls-{context}[`KafkaBridgeHttpTls`], xref:type-KafkaClientAuthenticationTls-{context}[`KafkaClientAuthenticationTls`], xref:type-OtlpAuthenticationTls-{context}[`OtlpAuthenticationTls`]
 
 
 [cols="2,2,3a",options="header"]
@@ -761,7 +761,7 @@ Used in: xref:type-StrimziMetricsReporterValues-{context}[`StrimziMetricsReporte
 |Property |Property type |Description
 |endpoint
 |string
-|The OTLP endpoint the metrics are pushed to, for example `http://my-collector:4317`. It must start with `http://` or `https://`. With the `http/protobuf` protocol, the `/v1/metrics` path is appended. When not set, the standard OpenTelemetry configuration applies, for example the `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable set in the container template.
+|The OTLP endpoint the metrics are pushed to, in the `http://<HOST>:<PORT>` or `https://<HOST>:<PORT>` format, for example `http://my-collector:4317`. With the `http/protobuf` protocol, the `/v1/metrics` path is appended. When not set, the standard OpenTelemetry configuration applies, for example the `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable set in the container template.
 |protocol
 |string (one of [http/protobuf, grpc])
 |The OTLP transport protocol, either `grpc` or `http/protobuf`. When not set, the standard OpenTelemetry configuration applies, which defaults to `grpc`.
@@ -769,8 +769,108 @@ Used in: xref:type-StrimziMetricsReporterValues-{context}[`StrimziMetricsReporte
 |integer
 |The interval in seconds between two pushes. When not set, the standard OpenTelemetry configuration applies, which defaults to 60 seconds.
 |resourceAttributes
-|map
-|Additional resource attributes added to the pushed metrics. They override the attributes set by the operator, such as `service.name`, for the same keys.
+|xref:type-OtlpResourceAttribute-{context}[`OtlpResourceAttribute`] array
+|Resource attributes added to the pushed metrics, for example to identify the pod they come from. Each attribute has a `name`, and either a static `value` or a `valueFrom` taking the value from a field of the pod. No resource attributes are added by default.
+|tls
+|xref:type-ClientTls-{context}[`ClientTls`]
+|TLS configuration for connecting to an `https://` OTLP endpoint. When `trustedCertificates` is not set, the server certificate is verified against the default JVM trust store.
+|authentication
+|xref:type-OtlpAuthenticationTls-{context}[`OtlpAuthenticationTls`]
+|Authentication configuration for connecting to the OTLP endpoint.
+|====
+
+[id='type-OtlpResourceAttribute-{context}']
+= `OtlpResourceAttribute` schema reference
+
+Used in: xref:type-StrimziMetricsReporterOtlp-{context}[`StrimziMetricsReporterOtlp`]
+
+
+[cols="2,2,3a",options="header"]
+|====
+|Property |Property type |Description
+|name
+|string
+|The name of the resource attribute, for example `k8s.pod.name`.
+|value
+|string
+|The value of the resource attribute.
+|valueFrom
+|xref:type-OtlpResourceAttributeSource-{context}[`OtlpResourceAttributeSource`]
+|Reference to a field of the pod from which the value of the resource attribute is taken.
+|====
+
+[id='type-OtlpResourceAttributeSource-{context}']
+= `OtlpResourceAttributeSource` schema reference
+
+Used in: xref:type-OtlpResourceAttribute-{context}[`OtlpResourceAttribute`]
+
+
+[cols="2,2,3a",options="header"]
+|====
+|Property |Property type |Description
+|fieldRef
+|https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#objectfieldselector-v1-core[ObjectFieldSelector]
+|Selects a field of the pod, in the same way as the Kubernetes Downward API for environment variables. Supported fields are `metadata.name`, `metadata.namespace`, `metadata.uid`, `metadata.labels['<KEY>']`, `metadata.annotations['<KEY>']`, `spec.nodeName`, `spec.serviceAccountName`, `status.hostIP`, `status.hostIPs`, `status.podIP` and `status.podIPs`.
+|====
+
+[id='type-ClientTls-{context}']
+= `ClientTls` schema reference
+
+Used in: xref:type-KafkaBridgeSpec-{context}[`KafkaBridgeSpec`], xref:type-KafkaConnectSpec-{context}[`KafkaConnectSpec`], xref:type-KafkaMirrorMaker2ClusterSpec-{context}[`KafkaMirrorMaker2ClusterSpec`], xref:type-KafkaMirrorMaker2TargetClusterSpec-{context}[`KafkaMirrorMaker2TargetClusterSpec`], xref:type-StrimziMetricsReporterOtlp-{context}[`StrimziMetricsReporterOtlp`]
+
+xref:type-ClientTls-schema-{context}[Full list of `ClientTls` schema properties]
+
+include::../api/io.strimzi.api.kafka.model.common.ClientTls.adoc[leveloffset=+1]
+
+[id='type-ClientTls-schema-{context}']
+== `ClientTls` schema properties
+
+
+[cols="2,2,3a",options="header"]
+|====
+|Property |Property type |Description
+|trustedCertificates
+|xref:type-CertSecretSource-{context}[`CertSecretSource`] array
+|Trusted certificates for TLS connection.
+|====
+
+[id='type-CertSecretSource-{context}']
+= `CertSecretSource` schema reference
+
+Used in: xref:type-ClientTls-{context}[`ClientTls`]
+
+
+[cols="2,2,3a",options="header"]
+|====
+|Property |Property type |Description
+|secretName
+|string
+|The name of the Secret containing the certificate.
+|certificate
+|string
+|The name of the file certificate in the secret.
+|pattern
+|string
+|Pattern for the certificate files in the secret. Use the link:https://en.wikipedia.org/wiki/Glob_(programming)[_glob syntax_] for the pattern. All files in the secret that match the pattern are used.
+|====
+
+[id='type-OtlpAuthenticationTls-{context}']
+= `OtlpAuthenticationTls` schema reference
+
+Used in: xref:type-StrimziMetricsReporterOtlp-{context}[`StrimziMetricsReporterOtlp`]
+
+
+The `type` property is a discriminator that distinguishes use of the `OtlpAuthenticationTls` type from other subtypes that may be added in the future.
+It must have the value `tls` for the type `OtlpAuthenticationTls`.
+[cols="2,2,3a",options="header"]
+|====
+|Property |Property type |Description
+|type
+|string
+|Must be `tls`.
+|certificateAndKey
+|xref:type-CertAndKeySecretSource-{context}[`CertAndKeySecretSource`]
+|Reference to the `Secret` which holds the client certificate and private key pair, in PEM format.
 |====
 
 [id='type-InlineLogging-{context}']
@@ -2168,47 +2268,6 @@ include::../api/io.strimzi.api.kafka.model.connect.KafkaConnectSpec.adoc[levelof
 |plugins
 |xref:type-MountedPlugin-{context}[`MountedPlugin`] array
 |List of connector plugins to mount into the `KafkaConnect` pod.
-|====
-
-[id='type-ClientTls-{context}']
-= `ClientTls` schema reference
-
-Used in: xref:type-KafkaBridgeSpec-{context}[`KafkaBridgeSpec`], xref:type-KafkaConnectSpec-{context}[`KafkaConnectSpec`], xref:type-KafkaMirrorMaker2ClusterSpec-{context}[`KafkaMirrorMaker2ClusterSpec`], xref:type-KafkaMirrorMaker2TargetClusterSpec-{context}[`KafkaMirrorMaker2TargetClusterSpec`]
-
-xref:type-ClientTls-schema-{context}[Full list of `ClientTls` schema properties]
-
-include::../api/io.strimzi.api.kafka.model.common.ClientTls.adoc[leveloffset=+1]
-
-[id='type-ClientTls-schema-{context}']
-== `ClientTls` schema properties
-
-
-[cols="2,2,3a",options="header"]
-|====
-|Property |Property type |Description
-|trustedCertificates
-|xref:type-CertSecretSource-{context}[`CertSecretSource`] array
-|Trusted certificates for TLS connection.
-|====
-
-[id='type-CertSecretSource-{context}']
-= `CertSecretSource` schema reference
-
-Used in: xref:type-ClientTls-{context}[`ClientTls`]
-
-
-[cols="2,2,3a",options="header"]
-|====
-|Property |Property type |Description
-|secretName
-|string
-|The name of the Secret containing the certificate.
-|certificate
-|string
-|The name of the file certificate in the secret.
-|pattern
-|string
-|Pattern for the certificate files in the secret. Use the link:https://en.wikipedia.org/wiki/Glob_(programming)[_glob syntax_] for the pattern. All files in the secret that match the pattern are used.
 |====
 
 [id='type-KafkaClientAuthenticationTls-{context}']

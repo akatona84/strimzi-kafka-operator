@@ -4,8 +4,11 @@
  */
 package io.strimzi.operator.cluster.model;
 
+import io.fabric8.kubernetes.api.model.ObjectFieldSelectorBuilder;
+import io.strimzi.api.kafka.model.common.CertSecretSourceBuilder;
 import io.strimzi.api.kafka.model.common.EnvironmentVariableRackBuilder;
 import io.strimzi.api.kafka.model.common.TopologyLabelRackBuilder;
+import io.strimzi.api.kafka.model.common.metrics.OtlpResourceAttributeBuilder;
 import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporterBuilder;
 import io.strimzi.api.kafka.model.kafka.EphemeralStorageBuilder;
 import io.strimzi.api.kafka.model.kafka.JbodStorageBuilder;
@@ -333,25 +336,41 @@ public class KafkaBrokerConfigurationBuilderTest {
                                     .withEnabled(false)
                                 .endPrometheusEndpoint()
                                 .withNewOtlp()
-                                    .withEndpoint("http://my-collector:4317")
+                                    .withEndpoint("https://my-collector:4317")
+                                    .withResourceAttributes(new OtlpResourceAttributeBuilder()
+                                            .withName("k8s.pod.name")
+                                            .withNewValueFrom()
+                                                .withFieldRef(new ObjectFieldSelectorBuilder().withFieldPath("metadata.name").build())
+                                            .endValueFrom()
+                                            .build())
+                                    .withNewTls()
+                                        .withTrustedCertificates(new CertSecretSourceBuilder().withSecretName("collector-ca").withCertificate("ca.crt").build())
+                                    .endTls()
+                                    .withNewOtlpAuthenticationTls()
+                                        .withNewCertificateAndKey()
+                                            .withSecretName("my-client")
+                                            .withCertificate("tls.crt")
+                                            .withKey("tls.key")
+                                        .endCertificateAndKey()
+                                    .endOtlpAuthenticationTls()
                                 .endOtlp()
                             .endValues()
                             .build())
                         .build());
 
         String configuration = new KafkaBrokerConfigurationBuilder(Reconciliation.DUMMY_RECONCILIATION, NODE_REF, KafkaClusterSecurityContext.DEFAULT_KAFKA_CLUSTER_SECURITY_CONTEXT)
-                .withStrimziMetricsReporter(model, model.otlpConfiguration("my-namespace", "my-cluster", "kafka", null))
+                .withStrimziMetricsReporter(model, model.otlpConfiguration("my-namespace", "my-cluster-kafka"))
                 .build();
 
         assertThat(configuration, isEquivalent("node.id=2",
                 StrimziMetricsReporterConfig.LISTENER_ENABLE + "=false",
                 StrimziMetricsReporterConfig.ALLOW_LIST + "=kafka_log.*,kafka_network.*",
                 "prometheus.metrics.reporter.otlp.enable=true",
-                "prometheus.metrics.reporter.otlp.endpoint=http://my-collector:4317",
-                "prometheus.metrics.reporter.otlp.resource.attributes=k8s.namespace.name=my-namespace,"
-                        + "k8s.pod.name=${strimzienv:STRIMZI_POD_NAME},k8s.container.name=kafka,"
-                        + "k8s.node.name=${strimzienv:STRIMZI_NODE_NAME},service.name=my-cluster,"
-                        + "service.namespace=my-namespace,service.instance.id=my-namespace.${strimzienv:STRIMZI_POD_NAME}.kafka"));
+                "prometheus.metrics.reporter.otlp.endpoint=https://my-collector:4317",
+                "prometheus.metrics.reporter.otlp.resource.attributes=k8s.pod.name=${strimzienv:STRIMZI_OTLP_RESOURCE_ATTRIBUTE_0}",
+                "prometheus.metrics.reporter.otlp.ssl.truststore.certificates=${strimzisecrets:my-namespace/my-cluster-kafka-otlp-trusted-certs:ca.crt}",
+                "prometheus.metrics.reporter.otlp.ssl.keystore.certificate.chain=${strimzisecrets:my-namespace/my-client:tls.crt}",
+                "prometheus.metrics.reporter.otlp.ssl.keystore.key=${strimzisecrets:my-namespace/my-client:tls.key}"));
     }
 
     @Test

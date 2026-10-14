@@ -7,16 +7,21 @@ package io.strimzi.operator.cluster.model;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.OwnerReference;
 import io.fabric8.kubernetes.api.model.ResourceRequirements;
+import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.ServiceAccount;
 import io.strimzi.api.kafka.model.common.JvmOptions;
 import io.strimzi.api.kafka.model.common.StrimziProbe;
 import io.strimzi.api.kafka.model.common.template.ContainerTemplate;
 import io.strimzi.api.kafka.model.common.template.ResourceTemplate;
+import io.strimzi.operator.cluster.model.metrics.StrimziMetricsReporterModel;
 import io.strimzi.operator.cluster.model.securityprofiles.PodSecurityProviderFactory;
 import io.strimzi.operator.common.Reconciliation;
 import io.strimzi.operator.common.ReconciliationLogger;
+import io.strimzi.operator.common.Util;
 import io.strimzi.operator.common.model.Labels;
 import io.strimzi.plugin.security.profiles.PodSecurityProvider;
+
+import java.util.Map;
 
 /**
  * AbstractModel an abstract base model for all components of the {@code Kafka} custom resource
@@ -128,6 +133,19 @@ public abstract class AbstractModel {
      */
     public String getComponentName() {
         return componentName;
+    }
+
+    /**
+     * Generates the internal Secret aggregating the trusted certificates of the OTLP endpoint the Strimzi Metrics
+     * Reporter pushes the metrics to. The Pods load it with the KubernetesSecretConfigProvider.
+     *
+     * @param certificates  The trusted certificates in PEM format
+     *
+     * @return  The Secret
+     */
+    public Secret generateOtlpTrustedCertsSecret(String certificates) {
+        return ModelUtils.createSecret(StrimziMetricsReporterModel.otlpTrustedCertsSecretName(componentName), namespace, labels, ownerReference,
+                Map.of(StrimziMetricsReporterModel.OTLP_TRUSTED_CERTS_KEY, Util.encodeToBase64(certificates)), Map.of(), Map.of());
     }
 
     /**

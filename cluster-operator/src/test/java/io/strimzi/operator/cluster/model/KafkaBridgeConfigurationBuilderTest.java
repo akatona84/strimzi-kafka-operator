@@ -4,6 +4,7 @@
  */
 package io.strimzi.operator.cluster.model;
 
+import io.fabric8.kubernetes.api.model.ObjectFieldSelectorBuilder;
 import io.strimzi.api.kafka.model.bridge.KafkaBridgeAdminClientSpec;
 import io.strimzi.api.kafka.model.bridge.KafkaBridgeAdminClientSpecBuilder;
 import io.strimzi.api.kafka.model.bridge.KafkaBridgeConsumerSpec;
@@ -28,6 +29,7 @@ import io.strimzi.api.kafka.model.common.authentication.KafkaClientAuthenticatio
 import io.strimzi.api.kafka.model.common.authentication.KafkaClientAuthenticationTls;
 import io.strimzi.api.kafka.model.common.authentication.KafkaClientAuthenticationTlsBuilder;
 import io.strimzi.api.kafka.model.common.metrics.JmxPrometheusExporterMetrics;
+import io.strimzi.api.kafka.model.common.metrics.OtlpResourceAttributeBuilder;
 import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporter;
 import io.strimzi.api.kafka.model.common.tracing.OpenTelemetryTracing;
 import io.strimzi.operator.cluster.model.metrics.JmxPrometheusExporterModel;
@@ -730,15 +732,28 @@ public class KafkaBridgeConfigurationBuilderTest {
                                         .withEnabled(false)
                                     .endPrometheusEndpoint()
                                     .withNewOtlp()
-                                        .withEndpoint("http://my-collector:4317")
+                                        .withEndpoint("https://my-collector:4317")
                                         .withIntervalSeconds(30)
+                                        .withResourceAttributes(new OtlpResourceAttributeBuilder()
+                                                .withName("k8s.pod.name")
+                                                .withNewValueFrom()
+                                                    .withFieldRef(new ObjectFieldSelectorBuilder().withFieldPath("metadata.name").build())
+                                                .endValueFrom()
+                                                .build())
+                                        .withNewOtlpAuthenticationTls()
+                                            .withNewCertificateAndKey()
+                                                .withSecretName("my-client")
+                                                .withCertificate("tls.crt")
+                                                .withKey("tls.key")
+                                            .endCertificateAndKey()
+                                        .endOtlpAuthenticationTls()
                                     .endOtlp()
                                 .endValues()
                         .endStrimziMetricsReporterConfig()
                         .build());
 
         String configuration = new KafkaBridgeConfigurationBuilder(Reconciliation.DUMMY_RECONCILIATION, BRIDGE_CLUSTER, BRIDGE_BOOTSTRAP_SERVERS)
-                .withStrimziMetricsReporter(model, List.of(), model.otlpConfiguration("my-namespace", "my-bridge", "my-bridge-bridge", null))
+                .withStrimziMetricsReporter(model, List.of(), model.otlpConfiguration("my-namespace", "my-bridge-bridge"))
                 .build();
 
         // The Bridge pushes the metrics itself, so the OTLP output of the reporter stays disabled in the Kafka clients
@@ -748,12 +763,11 @@ public class KafkaBridgeConfigurationBuilderTest {
                 "bridge.metrics=" + StrimziMetricsReporter.TYPE_STRIMZI_METRICS_REPORTER,
                 "bridge.metrics.endpoint.enable=false",
                 "bridge.metrics.otlp.enable=true",
-                "bridge.metrics.otlp.endpoint=http://my-collector:4317",
+                "bridge.metrics.otlp.endpoint=https://my-collector:4317",
                 "bridge.metrics.otlp.interval.seconds=30",
-                "bridge.metrics.otlp.resource.attributes=k8s.namespace.name=my-namespace,"
-                        + "k8s.pod.name=${strimzienv:STRIMZI_POD_NAME},k8s.container.name=my-bridge-bridge,"
-                        + "k8s.node.name=${strimzienv:STRIMZI_NODE_NAME},service.name=my-bridge,"
-                        + "service.namespace=my-namespace,service.instance.id=my-namespace.${strimzienv:STRIMZI_POD_NAME}.my-bridge-bridge",
+                "bridge.metrics.otlp.resource.attributes=k8s.pod.name=${strimzienv:STRIMZI_OTLP_RESOURCE_ATTRIBUTE_0}",
+                "bridge.metrics.otlp.ssl.keystore.certificate.chain=${strimzisecrets:my-namespace/my-client:tls.crt}",
+                "bridge.metrics.otlp.ssl.keystore.key=${strimzisecrets:my-namespace/my-client:tls.key}",
                 "kafka.metric.reporters=" + StrimziMetricsReporterConfig.CLIENT_CLASS,
                 "kafka." + StrimziMetricsReporterConfig.ALLOW_LIST + "=kafka_producer_producer_metrics.*",
                 "kafka." + StrimziMetricsReporterConfig.LISTENER_ENABLE + "=false",

@@ -764,10 +764,16 @@ public class KafkaConnectCluster extends AbstractModel implements SupportsMetric
      *          configuration providers.
      */
     public Set<String> secretsToAllowAccessTo() {
-        return AuthenticationUtils.getAuthenticationSecretsToAccess(
+        Set<String> secretNames = AuthenticationUtils.getAuthenticationSecretsToAccess(
                 tls,
                 authentication,
                 KafkaConnectResources.internalTlsTrustedCertsSecretName(cluster));
+
+        if (metrics instanceof StrimziMetricsReporterModel reporterModel) {
+            secretNames.addAll(reporterModel.otlpSecretsToAccess(componentName));
+        }
+
+        return secretNames;
     }
 
     /**
@@ -832,7 +838,7 @@ public class KafkaConnectCluster extends AbstractModel implements SupportsMetric
      */
     protected Map<String, String> metricsOtlpConfiguration() {
         return metrics instanceof StrimziMetricsReporterModel reporterModel
-                ? reporterModel.otlpConfiguration(namespace, cluster, componentName, templateContainer)
+                ? reporterModel.otlpConfiguration(namespace, componentName)
                 : Map.of();
     }
 

@@ -4,6 +4,7 @@
  */
 package io.strimzi.operator.cluster.model;
 
+import io.strimzi.api.kafka.model.common.CertSecretSourceBuilder;
 import io.strimzi.api.kafka.model.common.ClientTls;
 import io.strimzi.api.kafka.model.common.ClientTlsBuilder;
 import io.strimzi.api.kafka.model.common.EnvironmentVariableRackBuilder;
@@ -19,6 +20,7 @@ import io.strimzi.api.kafka.model.common.authentication.KafkaClientAuthenticatio
 import io.strimzi.api.kafka.model.common.authentication.KafkaClientAuthenticationTls;
 import io.strimzi.api.kafka.model.common.authentication.KafkaClientAuthenticationTlsBuilder;
 import io.strimzi.api.kafka.model.common.metrics.OtlpProtocol;
+import io.strimzi.api.kafka.model.common.metrics.OtlpResourceAttributeBuilder;
 import io.strimzi.api.kafka.model.common.metrics.StrimziMetricsReporterBuilder;
 import io.strimzi.api.kafka.model.connect.KafkaConnectSpecBuilder;
 import io.strimzi.operator.cluster.model.metrics.MetricsModel;
@@ -690,13 +692,17 @@ class KafkaConnectConfigurationBuilderTest {
                         .withNewOtlp()
                             .withEndpoint("http://my-collector:4318")
                             .withProtocol(OtlpProtocol.HTTP_PROTOBUF)
+                            .withResourceAttributes(new OtlpResourceAttributeBuilder().withName("deployment.environment.name").withValue("production").build())
+                            .withNewTls()
+                                .withTrustedCertificates(new CertSecretSourceBuilder().withSecretName("collector-ca").withCertificate("ca.crt").build())
+                            .endTls()
                         .endOtlp()
                     .endValues()
                     .build())
                 .build());
 
         String configuration = new KafkaConnectConfigurationBuilder(Reconciliation.DUMMY_RECONCILIATION, BOOTSTRAP_SERVERS)
-                .withStrimziMetricsReporter(model, List.of(), model.otlpConfiguration("my-namespace", "my-connect", "my-connect-connect", null))
+                .withStrimziMetricsReporter(model, List.of(), model.otlpConfiguration("my-namespace", "my-connect-connect"))
                 .build();
 
         // The worker and its clients get the same settings, so they share a single exporter
@@ -706,8 +712,9 @@ class KafkaConnectConfigurationBuilderTest {
             assertThat(configuration, containsString(prefix + "prometheus.metrics.reporter.otlp.enable=true\n"));
             assertThat(configuration, containsString(prefix + "prometheus.metrics.reporter.otlp.endpoint=http://my-collector:4318\n"));
             assertThat(configuration, containsString(prefix + "prometheus.metrics.reporter.otlp.protocol=http/protobuf\n"));
-            assertThat(configuration, containsString(prefix + "prometheus.metrics.reporter.otlp.resource.attributes=k8s.namespace.name=my-namespace,"
-                    + "k8s.pod.name=${strimzienv:STRIMZI_POD_NAME},k8s.container.name=my-connect-connect,"));
+            assertThat(configuration, containsString(prefix + "prometheus.metrics.reporter.otlp.resource.attributes=deployment.environment.name=production\n"));
+            assertThat(configuration, containsString(prefix + "prometheus.metrics.reporter.otlp.ssl.truststore.certificates="
+                    + "${strimzisecrets:my-namespace/my-connect-connect-otlp-trusted-certs:ca.crt}\n"));
         }
     }
 
